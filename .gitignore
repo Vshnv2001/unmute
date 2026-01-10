@@ -1,0 +1,9 @@
+.venv/
+backend/.env
+sgsl_dataset/
+sgsl_processed/
+processed/
+Archive.zip
+__pycache__/
+utils/sgsl_dataset.zip
+utils/sgsl_dataset_260525.zip
