@@ -4,166 +4,731 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGSL Translator - Voice & Text</title>
+    <title>UNMUTE — SGSL Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #050505;
+            --bg-secondary: #0a0a0a;
+            --bg-elevated: #111111;
+            --bg-glass: rgba(255, 255, 255, 0.02);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-glow: rgba(0, 255, 170, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.5);
+            --text-muted: rgba(255, 255, 255, 0.25);
+            --accent-primary: #00ffaa;
+            --accent-secondary: #00d4ff;
+            --accent-gradient: linear-gradient(135deg, #00ffaa 0%, #00d4ff 50%, #7b61ff 100%);
+            --glow-primary: 0 0 60px rgba(0, 255, 170, 0.15);
+            --glow-intense: 0 0 100px rgba(0, 255, 170, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Outfit', sans-serif;
-        }
-
-        /* Microphone button animations */
-        @keyframes pulse-ring {
-            0% {
-                transform: scale(0.8);
-                opacity: 0.8;
-            }
-
-            50% {
-                transform: scale(1.2);
-                opacity: 0.4;
-            }
-
-            100% {
-                transform: scale(0.8);
-                opacity: 0.8;
-            }
-        }
-
-        @keyframes recording-pulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-            }
-
-            50% {
-                box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
-            }
-        }
-
-        .recording {
-            animation: recording-pulse 1.5s infinite;
-            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-        }
-
-        .mic-btn {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
             position: relative;
-            transition: all 0.3s ease;
         }
 
-        .mic-btn:hover:not(.recording) {
+        /* Ambient Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(0, 255, 170, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 212, 255, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(123, 97, 255, 0.02) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Noise Texture Overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.015;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .logo {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .title {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 800;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            text-shadow: 0 0 80px rgba(0, 255, 170, 0.3);
+        }
+
+        .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            letter-spacing: 0.1em;
+        }
+
+        /* Main Card */
+        .main-card {
+            width: 100%;
+            max-width: 900px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(40px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: var(--glow-primary);
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        /* Mode Tabs */
+        .mode-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .tabs-container {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .mode-tab {
+            padding: 0.875rem 2rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mode-tab::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            border-radius: 12px;
+        }
+
+        .mode-tab.active {
+            color: var(--bg-primary);
+        }
+
+        .mode-tab.active::before {
+            opacity: 1;
+        }
+
+        .mode-tab:not(.active):hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .mode-tab span,
+        .mode-tab svg {
+            position: relative;
+            z-index: 1;
+        }
+
+        .mode-tab svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.5;
+        }
+
+        /* Text Input Section */
+        .input-section {
+            animation: fadeIn 0.5s ease;
+        }
+
+        .text-input {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.125rem;
+            color: var(--text-primary);
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
+            min-height: 120px;
+        }
+
+        .text-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .text-input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 4px rgba(0, 255, 170, 0.1), var(--glow-primary);
+        }
+
+        /* Translate Button */
+        .translate-btn {
+            width: 100%;
+            margin-top: 1.5rem;
+            padding: 1.25rem 2rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 14px;
+            font-family: 'Syne', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--bg-primary);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .translate-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .translate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--glow-intense);
+        }
+
+        .translate-btn:hover::before {
+            opacity: 1;
+        }
+
+        .translate-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        /* Voice Input Section */
+        .voice-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 0;
+        }
+
+        .mic-button {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-subtle);
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: visible;
+        }
+
+        .mic-button::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: -1;
+        }
+
+        .mic-button:hover::before {
+            opacity: 0.5;
+        }
+
+        .mic-button:hover {
+            border-color: var(--accent-primary);
+            box-shadow: var(--glow-primary);
             transform: scale(1.05);
         }
 
-        .mic-btn:active:not(.recording) {
-            transform: scale(0.95);
+        .mic-button svg {
+            width: 48px;
+            height: 48px;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
         }
 
-        /* Audio wave visualization */
+        .mic-button:hover svg {
+            color: var(--accent-primary);
+        }
+
+        /* Recording State */
+        .mic-button.recording {
+            border-color: #ff3366;
+            animation: pulse-recording 1.5s ease-in-out infinite;
+        }
+
+        .mic-button.recording::before {
+            background: linear-gradient(135deg, #ff3366, #ff6b6b);
+            opacity: 0.6;
+        }
+
+        .mic-button.recording svg {
+            color: #ff3366;
+        }
+
+        @keyframes pulse-recording {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.4), 0 0 40px rgba(255, 51, 102, 0.2);
+            }
+            50% {
+                box-shadow: 0 0 0 20px rgba(255, 51, 102, 0), 0 0 60px rgba(255, 51, 102, 0.4);
+            }
+        }
+
+        .mic-status {
+            margin-top: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.1em;
+        }
+
+        /* Audio Wave */
         .audio-wave {
             display: flex;
             align-items: center;
-            gap: 3px;
-            height: 24px;
+            justify-content: center;
+            gap: 6px;
+            height: 40px;
+            margin-top: 1.5rem;
         }
 
         .audio-wave .bar {
             width: 4px;
-            background: linear-gradient(to top, #14b8a6, #3b82f6);
-            border-radius: 2px;
-            animation: wave 0.5s ease-in-out infinite;
+            background: var(--accent-gradient);
+            border-radius: 4px;
+            animation: wave 0.6s ease-in-out infinite;
         }
 
-        .audio-wave .bar:nth-child(1) {
-            animation-delay: 0s;
-        }
-
-        .audio-wave .bar:nth-child(2) {
-            animation-delay: 0.1s;
-        }
-
-        .audio-wave .bar:nth-child(3) {
-            animation-delay: 0.2s;
-        }
-
-        .audio-wave .bar:nth-child(4) {
-            animation-delay: 0.3s;
-        }
-
-        .audio-wave .bar:nth-child(5) {
-            animation-delay: 0.4s;
-        }
+        .audio-wave .bar:nth-child(1) { animation-delay: 0s; height: 12px; }
+        .audio-wave .bar:nth-child(2) { animation-delay: 0.1s; height: 20px; }
+        .audio-wave .bar:nth-child(3) { animation-delay: 0.2s; height: 32px; }
+        .audio-wave .bar:nth-child(4) { animation-delay: 0.3s; height: 20px; }
+        .audio-wave .bar:nth-child(5) { animation-delay: 0.4s; height: 12px; }
 
         @keyframes wave {
+            0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
+            50% { transform: scaleY(1); opacity: 1; }
+        }
 
-            0%,
-            100% {
-                height: 8px;
-            }
+        /* Transcription Review */
+        .transcription-review {
+            width: 100%;
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+        }
 
-            50% {
-                height: 24px;
+        .review-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .transcription-input {
+            width: 100%;
+            background: transparent;
+            border: 1px dashed var(--border-glow);
+            border-radius: 10px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.125rem;
+            color: var(--accent-primary);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .transcription-input:focus {
+            border-style: solid;
+            background: rgba(0, 255, 170, 0.03);
+        }
+
+        .review-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+
+        .btn-confirm {
+            flex: 1;
+            padding: 1rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 0.875rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--bg-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--glow-primary);
+        }
+
+        .btn-retry {
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-retry:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        /* Output Section */
+        .output-section {
+            margin-top: 3rem;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-subtle), transparent);
+            margin-bottom: 2.5rem;
+        }
+
+        .gloss-container {
+            margin-bottom: 2rem;
+        }
+
+        .gloss-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .gloss-tokens {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.625rem;
+        }
+
+        .gloss-token {
+            padding: 0.625rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .gloss-token.active {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.2);
+        }
+
+        .gloss-token.missing {
+            border-color: rgba(255, 100, 100, 0.3);
+            color: rgba(255, 100, 100, 0.7);
+            text-decoration: line-through;
+        }
+
+        /* Players Container */
+        .players-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .players-grid {
+                grid-template-columns: 1fr;
             }
         }
 
-        /* Transcription text animation */
-        .transcription-text {
-            animation: fadeIn 0.3s ease;
+        .player-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
         }
 
+        .player-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .player-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .player-badge {
+            padding: 0.25rem 0.625rem;
+            background: var(--accent-gradient);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--bg-primary);
+            letter-spacing: 0.05em;
+        }
+
+        .player-content {
+            aspect-ratio: 16/10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-primary);
+            position: relative;
+        }
+
+        .player-content img {
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .player-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .player-placeholder svg {
+            width: 48px;
+            height: 48px;
+            opacity: 0.3;
+        }
+
+        .player-placeholder span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+        }
+
+        #avatarContainer {
+            aspect-ratio: 16/10;
+            background: var(--bg-primary);
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .control-btn {
+            padding: 0.875rem 1.75rem;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            font-family: 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.1);
+        }
+
+        /* Status Notes */
+        .status-notes {
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Animations */
         @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
             from {
                 opacity: 0;
-                transform: translateY(5px);
+                transform: translateY(30px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
 
-        /* Input mode tabs */
-        .mode-tab {
-            transition: all 0.3s ease;
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .mode-tab.active {
-            background: linear-gradient(135deg, #14b8a6, #3b82f6);
+        .hidden {
+            display: none !important;
         }
 
-        .mode-tab:not(.active):hover {
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.1);
         }
 
-        /* Editable transcription */
+        /* Legacy class mappings for JS compatibility */
+        .recording {
+            border-color: #ff3366 !important;
+            animation: pulse-recording 1.5s ease-in-out infinite !important;
+        }
+        
         .editable-transcription {
+            width: 100%;
             background: transparent;
-            border: 1px dashed rgba(20, 184, 166, 0.5);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: #5eead4;
+            border: 1px dashed var(--border-glow);
+            border-radius: 10px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 1.125rem;
-            width: 100%;
+            color: var(--accent-primary);
             outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .editable-transcription:focus {
-            border-color: #14b8a6;
-            background: rgba(20, 184, 166, 0.1);
-        }
-
-        /* 3D Avatar Container */
-        #avatarContainer {
-            width: 100%;
-            height: 350px;
-            background: #111;
-            border-radius: 0.75rem;
-            overflow: hidden;
-            position: relative;
-            margin-bottom: 1rem;
         }
     </style>
     <script type="importmap">
@@ -175,174 +740,143 @@
     </script>
 </head>
 
-<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">Singapore Sign Language</div>
+            <h1 class="title">UNMUTE</h1>
+            <p class="subtitle">// Real-time SGSL Translation</p>
+        </header>
 
-    <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
-        <h1
-            class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
-            Text to SGSL
-        </h1>
-        <p class="text-slate-400 text-center mb-6">Singapore Sign Language Translator (Demo)</p>
-
-        <!-- Input Mode Tabs -->
-        <div class="flex justify-center mb-6">
-            <div class="bg-slate-900/50 p-1 rounded-xl flex gap-1 border border-slate-700">
-                <button id="textModeTab"
-                    class="mode-tab active px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Text
-                </button>
-                <button id="voiceModeTab"
-                    class="mode-tab px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 text-slate-400">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                    Voice
-                </button>
-            </div>
-        </div>
-
-        <!-- Text Input Section -->
-        <div id="textInputSection" class="space-y-4">
-            <textarea id="inputText"
-                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder-slate-600 resize-none"
-                rows="3" placeholder="Type here... (e.g., 'I want apple')"></textarea>
-
-            <button id="translateBtn"
-                class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg">
-                Translate
-            </button>
-        </div>
-
-        <!-- Voice Input Section -->
-        <div id="voiceInputSection" class="hidden space-y-4">
-            <!-- Microphone Button -->
-            <div class="flex flex-col items-center justify-center py-6">
-                <button id="micBtn"
-                    class="mic-btn w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-teal-500/25 mb-4">
-                    <svg id="micIcon" class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                    <svg id="stopIcon" class="w-10 h-10 hidden" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                </button>
-
-                <p id="micStatus" class="text-slate-400 text-sm font-medium">Click to start recording</p>
-
-                <!-- Audio Wave Visualization (shown when recording) -->
-                <div id="audioWave" class="audio-wave hidden mt-4">
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                </div>
-            </div>
-
-            <!-- Processing Status -->
-            <div id="processingStatus" class="hidden text-center py-4">
-                <div
-                    class="inline-flex items-center gap-3 bg-slate-900/50 px-6 py-3 rounded-xl border border-slate-700">
-                    <svg class="animate-spin w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <span id="processingText" class="text-slate-300 font-medium">Processing audio...</span>
-                </div>
-            </div>
-
-            <!-- Transcription Review Section -->
-            <div id="transcriptionReviewSection"
-                class="hidden bg-slate-900/50 rounded-xl p-5 border border-slate-700 space-y-4">
-                <div>
-                    <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">Transcription (edit if needed)
-                    </h3>
-                    <input type="text" id="transcriptionInput" class="editable-transcription"
-                        placeholder="Transcribed text will appear here...">
-                </div>
-
-                <div class="flex gap-3">
-                    <button id="confirmTranscriptionBtn"
-                        class="flex-1 bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        <!-- Main Card -->
+        <main class="main-card">
+            <!-- Mode Tabs -->
+            <div class="mode-tabs">
+                <div class="tabs-container">
+                    <button id="textModeTab" class="mode-tab active">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
-                        Confirm & Translate
+                        <span>Text</span>
                     </button>
-                    <button id="retryRecordingBtn"
-                        class="px-6 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    <button id="voiceModeTab" class="mode-tab">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                         </svg>
-                        Retry
+                        <span>Voice</span>
                     </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Output Section -->
-        <div id="outputSection" class="mt-8 hidden space-y-6">
+            <!-- Text Input Section -->
+            <div id="textInputSection" class="input-section">
+                <textarea id="inputText" class="text-input" rows="4" placeholder="Type your message here..."></textarea>
+                <button id="translateBtn" class="translate-btn">
+                    Translate to SGSL
+                </button>
+            </div>
 
-            <!-- Gloss Display -->
-            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">SGSL Gloss Structure</h3>
-                <div id="glossDisplay" class="flex flex-wrap gap-2">
-                    <!-- Gloss tokens injected here -->
+            <!-- Voice Input Section -->
+            <div id="voiceInputSection" class="input-section hidden">
+                <div class="voice-section">
+                    <button id="micBtn" class="mic-button">
+                        <svg id="micIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        <svg id="stopIcon" class="hidden" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                    </button>
+                    <p id="micStatus" class="mic-status">Tap to record</p>
+                    
+                    <div id="audioWave" class="audio-wave hidden">
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                    </div>
                 </div>
 
-                <!-- Side by Side Container -->
-                <div class="flex gap-4 mb-4">
-                    <!-- GIF Player -->
-                    <div
-                        class="flex-1 aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
-                        <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
-                        <div id="placeholder" class="text-slate-600 flex flex-col items-center">
-                            <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                                </path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                <!-- Transcription Review -->
+                <div id="transcriptionReviewSection" class="transcription-review hidden">
+                    <div class="review-label">Transcription</div>
+                    <input type="text" id="transcriptionInput" class="transcription-input" placeholder="Your speech will appear here...">
+                    <div class="review-actions">
+                        <button id="confirmTranscriptionBtn" class="btn-confirm">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                             </svg>
-                            <span class="text-sm">GIF Player</span>
-                        </div>
+                            Confirm
+                        </button>
+                        <button id="retryRecordingBtn" class="btn-retry">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-                        <!-- Overlay Label -->
-                        <div id="playerLabel"
-                            class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
-                            TOKEN
+            <!-- Output Section -->
+            <div id="outputSection" class="output-section hidden">
+                <div class="section-divider"></div>
+
+                <!-- Gloss Display -->
+                <div class="gloss-container">
+                    <div class="gloss-label">SGSL Gloss Structure</div>
+                    <div id="glossDisplay" class="gloss-tokens"></div>
+                </div>
+
+                <!-- Players -->
+                <div class="players-grid">
+                    <!-- GIF Player -->
+                    <div class="player-card">
+                        <div class="player-header">
+                            <span class="player-title">Reference GIF</span>
+                            <span id="playerLabel" class="player-badge hidden">TOKEN</span>
+                        </div>
+                        <div class="player-content">
+                            <img id="signPlayer" src="" class="hidden" alt="Sign Language">
+                            <div id="placeholder" class="player-placeholder">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>Awaiting input</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- 3D Avatar Area -->
-                    <div id="avatarContainer" class="flex-1"></div>
+                    <!-- 3D Avatar -->
+                    <div class="player-card">
+                        <div class="player-header">
+                            <span class="player-title">3D Avatar</span>
+                            <span class="player-badge">LIVE</span>
+                        </div>
+                        <div id="avatarContainer"></div>
+                    </div>
                 </div>
 
                 <!-- Controls -->
-                <div class="flex justify-center mb-4">
-                    <button id="replayBtn"
-                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-4 py-2 rounded-lg text-sm transition-all">🔄
-                        Replay</button>
+                <div class="controls">
+                    <button id="replayBtn" class="control-btn">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Replay
+                    </button>
                 </div>
 
-                <!-- Notes/Status -->
-                <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
-
+                <!-- Status -->
+                <div id="statusNotes" class="status-notes"></div>
             </div>
-        </div>
+        </main>
+    </div>
 
-        <script type="module" src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>

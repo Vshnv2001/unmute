@@ -262,16 +262,16 @@ retryRecordingBtn.addEventListener('click', () => {
 function setConfirmLoading(loading) {
     confirmTranscriptionBtn.disabled = loading;
     confirmTranscriptionBtn.innerHTML = loading
-        ? `<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+        ? `<svg class="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24">
              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
            </svg>
            Translating...`
-        : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        : `<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
            </svg>
-           Confirm & Translate`;
-    confirmTranscriptionBtn.classList.toggle('opacity-50', loading);
+           Confirm`;
+    confirmTranscriptionBtn.style.opacity = loading ? '0.6' : '1';
 }
 
 function blobToBase64(blob) {
@@ -295,8 +295,8 @@ replayBtn.addEventListener('click', () => {
 
 function setLoading(loading) {
     translateBtn.disabled = loading;
-    translateBtn.textContent = loading ? "Translating..." : "Translate";
-    translateBtn.classList.toggle('opacity-50', loading);
+    translateBtn.textContent = loading ? "Translating..." : "Translate to SGSL";
+    translateBtn.style.opacity = loading ? '0.6' : '1';
 }
 
 function renderResult(data) {
@@ -311,17 +311,17 @@ function renderResult(data) {
     const unmatched = data.unmatched || [];
     const notes = data.notes || "";
 
-    // Render Gloss
+    // Render Gloss with new styling
     glossDisplay.innerHTML = "";
     if (gloss.length > 0) {
         gloss.forEach(token => {
             const badge = document.createElement('span');
-            badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
+            badge.className = "gloss-token";
             badge.textContent = token;
             glossDisplay.appendChild(badge);
         });
     } else {
-        glossDisplay.innerHTML = '<span class="text-slate-500 italic">No gloss tokens found</span>';
+        glossDisplay.innerHTML = '<span class="status-notes">No gloss tokens found</span>';
     }
 
     // Notes
