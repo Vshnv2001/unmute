@@ -27,10 +27,17 @@ const audioWave = document.getElementById('audioWave');
 const myPeerIdDisplay = document.getElementById('myPeerId');
 const remotePeerIdInput = document.getElementById('remotePeerId');
 const callBtn = document.getElementById('callBtn');
+const videoMicBtn = document.getElementById('videoMicBtn');
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const videoPlaceholder = document.getElementById('videoPlaceholder');
 const copyPeerIdBtn = document.getElementById('copyPeerId');
+
+// Video integrated output elements
+const videoTranscriptionDisplay = document.getElementById('videoTranscriptionDisplay');
+const videoSignPlayer = document.getElementById('videoSignPlayer');
+const videoPlayerPlaceholder = document.getElementById('videoPlayerPlaceholder');
+const videoPlayerLabel = document.getElementById('videoPlayerLabel');
 
 // Transcription review elements
 const transcriptionReviewSection = document.getElementById('transcriptionReviewSection');
@@ -45,6 +52,9 @@ let isPlaying = false;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let currentRecordingStream = null;
+let isVideoTranscription = false;
+
 
 // PeerJS state
 let peer = null;
@@ -64,7 +74,7 @@ async function initPeer() {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.stunprotocol.org:3478' },
     ];
-    
+
     try {
         const response = await fetch('http://127.0.0.1:8000/api/webrtc/ice-servers');
         if (response.ok) {
@@ -80,7 +90,7 @@ async function initPeer() {
         console.warn('Error fetching ICE servers from backend:', error);
         console.log('Using default STUN servers (TURN may not work without backend)');
     }
-    
+
     // Use public PeerJS server with proper STUN/TURN configuration
     // STUN servers help with NAT traversal, TURN servers relay traffic when direct connection fails
     peer = new Peer({
@@ -126,19 +136,19 @@ async function initPeer() {
 
 function handleCall(call) {
     currentCall = call;
-    
+
     call.on('stream', (remoteStream) => {
         console.log('Received remote stream');
         remoteVideo.srcObject = remoteStream;
         videoPlaceholder.classList.add('hidden');
     });
-    
+
     call.on('close', () => {
         console.log('Call closed');
         remoteVideo.srcObject = null;
         videoPlaceholder.classList.remove('hidden');
     });
-    
+
     call.on('error', (err) => {
         console.error('Call error:', err);
         // ICE failures often indicate network/NAT issues
@@ -148,19 +158,19 @@ function handleCall(call) {
             alert('Call error: ' + (err.message || err.type || 'Unknown error'));
         }
     });
-    
+
     // Monitor ICE connection state
     if (call.peerConnection) {
         call.peerConnection.oniceconnectionstatechange = () => {
             const state = call.peerConnection.iceConnectionState;
             console.log('ICE connection state:', state);
-            
+
             if (state === 'failed' || state === 'disconnected') {
                 console.warn('ICE connection failed or disconnected');
                 // The error handler above will catch this, but we log it here for debugging
             }
         };
-        
+
         call.peerConnection.onicecandidateerror = (event) => {
             console.error('ICE candidate error:', event);
             // Log but don't alert - this is often just a warning about unreachable servers
@@ -229,6 +239,40 @@ callBtn.addEventListener('click', () => {
     }
 });
 
+videoMicBtn.addEventListener('click', async () => {
+    if (!isRecording) {
+        if (!localStream) {
+            alert('Camera stream not active. Please switch to Video mode first.');
+            return;
+        }
+        isVideoTranscription = true;
+
+        // Clear previous video transcription text
+        videoTranscriptionDisplay.textContent = "Transcribing...";
+
+        await startRecording(localStream);
+        videoMicBtn.innerHTML = `
+            <svg class="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            Stop
+        `;
+        videoMicBtn.classList.add('bg-red-600', 'hover:bg-red-500');
+        videoMicBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+    } else {
+        stopRecording();
+        videoMicBtn.innerHTML = `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            Transcribe
+        `;
+        videoMicBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+        videoMicBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+    }
+});
+
 copyPeerIdBtn.addEventListener('click', () => {
     const id = myPeerIdDisplay.textContent;
     if (id && id !== 'Initializing...') {
@@ -247,26 +291,58 @@ micBtn.addEventListener('click', async () => {
     }
 });
 
-async function startRecording() {
+async function startRecording(providedStream = null) {
     try {
         // Reset UI
         transcriptionReviewSection.classList.add('hidden');
         outputSection.classList.add('hidden');
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                sampleRate: 16000,
-                channelCount: 1,
-                echoCancellation: true,
-                noiseSuppression: true
+        let stream;
+        if (providedStream) {
+            // When using the video stream, create a new stream with only the audio tracks
+            // This prevents MediaRecorder errors when mimeType is set to 'audio/webm'
+            const audioTracks = providedStream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                throw new Error('No audio track found in the video stream.');
             }
-        });
+            stream = new MediaStream(audioTracks);
+        } else {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }
+            });
+        }
+
+        // Detect supported MIME type
+        const types = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/mp4'
+        ];
+        let supportedType = '';
+        for (const type of types) {
+            if (MediaRecorder.isTypeSupported(type)) {
+                supportedType = type;
+                break;
+            }
+        }
+
+        if (!supportedType) {
+            throw new Error('No supported MediaRecorder MIME type found in this browser.');
+        }
 
         mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm;codecs=opus'
+            mimeType: supportedType
         });
 
         audioChunks = [];
+        // Only track if we created the stream specifically for this (standalone mic)
+        currentRecordingStream = providedStream ? null : stream;
 
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
@@ -275,8 +351,11 @@ async function startRecording() {
         };
 
         mediaRecorder.onstop = async () => {
-            // Stop all tracks
-            stream.getTracks().forEach(track => track.stop());
+            // Stop all tracks IF we created the stream specifically for this
+            if (currentRecordingStream) {
+                currentRecordingStream.getTracks().forEach(track => track.stop());
+                currentRecordingStream = null;
+            }
 
             // Process the audio (transcription only)
             await transcribeAudio();
@@ -285,16 +364,18 @@ async function startRecording() {
         mediaRecorder.start(100); // Collect data every 100ms
         isRecording = true;
 
-        // Update UI
-        micBtn.classList.add('recording');
-        micIcon.classList.add('hidden');
-        stopIcon.classList.remove('hidden');
-        micStatus.textContent = 'Recording... Click to stop';
-        audioWave.classList.remove('hidden');
+        // Update UI for standalone mic ONLY (video section has its own toggle)
+        if (!providedStream) {
+            micBtn.classList.add('recording');
+            micIcon.classList.add('hidden');
+            stopIcon.classList.remove('hidden');
+            micStatus.textContent = 'Recording... Click to stop';
+            audioWave.classList.remove('hidden');
+        }
 
     } catch (error) {
-        console.error('Error accessing microphone:', error);
-        alert('Could not access microphone. Please ensure you have granted permission.');
+        console.error('Error starting recording:', error);
+        alert('Could not start recording: ' + error.message);
     }
 }
 
@@ -303,7 +384,7 @@ function stopRecording() {
         mediaRecorder.stop();
         isRecording = false;
 
-        // Update UI
+        // Update UI for standalone mic
         micBtn.classList.remove('recording');
         micIcon.classList.remove('hidden');
         stopIcon.classList.add('hidden');
@@ -340,12 +421,24 @@ async function transcribeAudio() {
         // Hide processing status
         micStatus.textContent = 'Click to start recording';
 
-        // Show transcription for review
+        // Show transcription
         if (data.transcription) {
             transcriptionInput.value = data.transcription;
-            transcriptionReviewSection.classList.remove('hidden');
+
+            if (isVideoTranscription) {
+                videoTranscriptionDisplay.textContent = data.transcription;
+            } else {
+                transcriptionReviewSection.classList.remove('hidden');
+            }
+
+            // If it's video mode, trigger translation automatically
+            if (isVideoTranscription) {
+                // We keep isVideoTranscription true so that renderResult knows where to go
+                confirmTranscriptionBtn.click();
+            }
         } else {
             alert('No speech detected. Please try again.');
+            isVideoTranscription = false;
         }
 
     } catch (error) {
@@ -363,6 +456,7 @@ confirmTranscriptionBtn.addEventListener('click', async () => {
         return;
     }
 
+    const isForVideo = isVideoTranscription;
     setConfirmLoading(true);
 
     try {
@@ -375,12 +469,13 @@ confirmTranscriptionBtn.addEventListener('click', async () => {
         if (!res.ok) throw new Error("Translation failed");
 
         const data = await res.json();
-        renderResult(data);
+        renderResult(data, isForVideo);
 
     } catch (e) {
         alert("Translation Failed: " + e.message);
     } finally {
         setConfirmLoading(false);
+        if (isForVideo) isVideoTranscription = false; // Reset after use
     }
 });
 
@@ -424,52 +519,55 @@ replayBtn.addEventListener('click', () => {
     }
 });
 
-function renderResult(data) {
-    outputSection.classList.remove('hidden');
+function renderResult(data, isForVideo = false) {
+    if (!isForVideo) {
+        outputSection.classList.remove('hidden');
+        glossDisplay.innerHTML = "";
+        data.gloss.forEach(token => {
+            const badge = document.createElement('span');
+            badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
+            badge.textContent = token;
+            glossDisplay.appendChild(badge);
+        });
+
+        let notes = "";
+        if (data.unmatched.length > 0) notes += `Unmatched: ${data.unmatched.join(", ")}. `;
+        if (data.notes) notes += data.notes;
+        statusNotes.textContent = notes;
+    }
+
     currentPlan = data.plan;
-
-    // Render Gloss
-    glossDisplay.innerHTML = "";
-    data.gloss.forEach(token => {
-        const badge = document.createElement('span');
-        badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
-        badge.textContent = token;
-        glossDisplay.appendChild(badge);
-    });
-
-    // Notes
-    let notes = "";
-    if (data.unmatched.length > 0) notes += `Unmatched: ${data.unmatched.join(", ")}. `;
-    if (data.notes) notes += data.notes;
-    statusNotes.textContent = notes;
-
-    // Start Playback
-    playSequence(currentPlan);
+    playSequence(currentPlan, isForVideo);
 }
 
-async function playSequence(plan) {
+async function playSequence(plan, isForVideo = false) {
     if (isPlaying) return;
     isPlaying = true;
-    placeholder.classList.add('hidden');
-    signPlayer.classList.remove('hidden');
-    playerLabel.classList.remove('hidden');
+
+    const currentPlayer = isForVideo ? videoSignPlayer : signPlayer;
+    const currentPlaceholder = isForVideo ? videoPlayerPlaceholder : placeholder;
+    const currentLabel = isForVideo ? videoPlayerLabel : playerLabel;
+
+    currentPlaceholder.classList.add('hidden');
+    currentPlayer.classList.remove('hidden');
+    currentLabel.classList.remove('hidden');
 
     for (const item of plan) {
         if (item.type === 'sign' && item.assets.gif) {
-            playerLabel.textContent = item.token;
+            currentLabel.textContent = item.token;
             const baseUrl = "http://127.0.0.1:8000" + item.assets.gif;
-            signPlayer.src = baseUrl;
+            currentPlayer.src = baseUrl;
             await new Promise(r => setTimeout(r, 2000));
         } else {
-            playerLabel.textContent = item.token + " (No Asset)";
-            signPlayer.src = "";
+            currentLabel.textContent = item.token + " (No Asset)";
+            currentPlayer.src = "";
             await new Promise(r => setTimeout(r, 1500));
         }
     }
 
     isPlaying = false;
-    playerLabel.textContent = "DONE";
+    currentLabel.textContent = "DONE";
     setTimeout(() => {
-        playerLabel.classList.add('hidden');
+        currentLabel.classList.add('hidden');
     }, 1000);
 }

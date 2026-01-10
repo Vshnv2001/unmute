@@ -312,6 +312,50 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Integrated Controls & Output -->
+            <div class="flex justify-center py-2">
+                <button id="videoMicBtn"
+                    class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    Transcribe
+                </button>
+            </div>
+
+            <!-- Integrated Video Transcription & Animation Area -->
+            <div id="videoOutputArea"
+                class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/40 p-4 rounded-xl border border-slate-700/50">
+                <!-- Video Transcription -->
+                <div class="space-y-2">
+                    <h3 class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Transcription</h3>
+                    <div id="videoTranscriptionDisplay"
+                        class="bg-slate-950/50 p-3 rounded-lg border border-slate-800 h-24 overflow-y-auto text-sm text-teal-300 italic">
+                        Start speaking to see transcription...
+                    </div>
+                </div>
+                <!-- Video SGSL Player -->
+                <div class="space-y-2">
+                    <h3 class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">SGSL Translation</h3>
+                    <div
+                        class="aspect-video bg-black rounded-lg overflow-hidden border border-slate-800 relative flex items-center justify-center">
+                        <img id="videoSignPlayer" src="" class="h-full object-contain hidden" alt="Video SGSL Playback">
+                        <div id="videoPlayerPlaceholder" class="text-slate-700">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div id="videoPlayerLabel"
+                            class="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] font-mono text-teal-400 hidden">
+                            TOKEN
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Output Section -->
