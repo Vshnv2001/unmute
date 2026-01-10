@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,24 +8,45 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Outfit', sans-serif; }
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        #avatarContainer {
+            width: 100%;
+            height: 350px;
+            background: #111;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 1rem;
+        }
     </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
 </head>
+
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
 
     <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
-        <h1 class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+        <h1
+            class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
             Text to SGSL
         </h1>
         <p class="text-slate-400 text-center mb-8">Singapore Sign Language Translator (Demo)</p>
 
         <!-- Input Section -->
         <div class="space-y-4">
-            <textarea id="inputText" 
+            <textarea id="inputText"
                 class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder-slate-600"
                 rows="3" placeholder="Type here... (e.g., 'I want apple')"></textarea>
-            
-            <button id="translateBtn" 
+
+            <button id="translateBtn"
                 class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg">
                 Translate
             </button>
@@ -32,40 +54,57 @@
 
         <!-- Output Section -->
         <div id="outputSection" class="mt-8 hidden space-y-6">
-            
+
             <!-- Gloss Display -->
             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                 <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">SGSL Gloss Structure</h3>
                 <div id="glossDisplay" class="flex flex-wrap gap-2">
                     <!-- Gloss tokens injected here -->
                 </div>
-            </div>
 
-            <!-- Player -->
-            <div class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
-                <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
-                <div id="placeholder" class="text-slate-600 flex flex-col items-center">
-                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span class="text-sm">Video Area</span>
+                <!-- Side by Side Container -->
+                <div class="flex gap-4 mb-4">
+                    <!-- GIF Player -->
+                    <div
+                        class="flex-1 aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
+                        <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
+                        <div id="placeholder" class="text-slate-600 flex flex-col items-center">
+                            <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                </path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span class="text-sm">GIF Player</span>
+                        </div>
+
+                        <!-- Overlay Label -->
+                        <div id="playerLabel"
+                            class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
+                            TOKEN
+                        </div>
+                    </div>
+
+                    <!-- 3D Avatar Area -->
+                    <div id="avatarContainer" class="flex-1"></div>
                 </div>
-                
+
                 <!-- Controls -->
-                <div class="absolute bottom-4 right-4 space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button id="replayBtn" class="bg-white/10 hover:bg-white/20 backdrop-blur px-3 py-1 rounded text-sm">Replay</button>
+                <div class="flex justify-center mb-4">
+                    <button id="replayBtn"
+                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-4 py-2 rounded-lg text-sm transition-all">🔄
+                        Replay</button>
                 </div>
-                
-                <!-- Overlay Label -->
-                 <div id="playerLabel" class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
-                    TOKEN
-                </div>
+
+                <!-- Notes/Status -->
+                <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
+
             </div>
-
-            <!-- Notes/Status -->
-            <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
-
         </div>
-    </div>
 
-    <script src="script.js"></script>
+        <script type="module" src="script.js"></script>
 </body>
+
 </html>
