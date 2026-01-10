@@ -16,7 +16,7 @@ export class AvatarController {
     initScene() {
         // Scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x1a1a1a); // Dark gray
+        this.scene.background = new THREE.Color(0xFBF9F7); // Warm beige to match UI
 
         // Camera - use default aspect, will be fixed on resize
         this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
@@ -33,11 +33,6 @@ export class AvatarController {
         light.position.set(2, 2, 5);
         this.scene.add(light);
         this.scene.add(new THREE.AmbientLight(0x404040));
-
-        // Grid (Floor)
-        const gridHelper = new THREE.GridHelper(2, 10, 0x444444, 0x222222);
-        gridHelper.position.y = -0.2;
-        this.scene.add(gridHelper);
     }
 
     // Resize canvas when container becomes visible
