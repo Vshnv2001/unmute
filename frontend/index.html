@@ -112,6 +112,21 @@
 
         .control-btn.off {
             background: #ef4444;
+            position: relative;
+        }
+
+        .control-btn.off svg {
+            opacity: 0.5;
+        }
+
+        .control-btn.off::after {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 32px;
+            background: white;
+            transform: rotate(45deg);
+            pointer-events: none;
         }
 
         .control-btn.on {
@@ -144,40 +159,24 @@
 
 <body class="min-h-screen flex flex-col">
 
-    <!-- Auth Section -->
-    <div id="authSection" class="flex-1 flex items-center justify-center p-6">
-        <div class="glass p-8 rounded-3xl w-full max-w-md space-y-8">
-            <div class="text-center">
+    <!-- Portal Section (Entry) -->
+    <div id="portalSection" class="flex-1 flex items-center justify-center p-6">
+        <div class="glass p-8 rounded-3xl w-full max-w-md space-y-8 text-center">
+            <div>
                 <h1 class="text-5xl font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
                     Unmute</h1>
                 <p class="text-slate-400 mt-2">Inclusive Video Conferencing for Everyone</p>
             </div>
 
-            <div id="loginForm" class="space-y-4">
-                <input type="text" id="username" placeholder="Username"
-                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-teal-500 transition-all">
-                <input type="password" id="password" placeholder="Password"
-                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-teal-500 transition-all">
-                <button id="loginBtn"
-                    class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-teal-500/20">Login</button>
-                <div class="text-center">
-                    <button id="showSignup" class="text-sm text-slate-400 hover:text-teal-400 transition-all">New here?
-                        Sign up</button>
+            <div class="space-y-6">
+                <div class="text-left space-y-2">
+                    <label class="text-sm font-medium text-slate-400 ml-1">Your Display Name</label>
+                    <input type="text" id="displayName" placeholder="Enter your name"
+                        class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 text-lg outline-none focus:border-teal-500 transition-all">
                 </div>
-            </div>
-
-            <div id="signupForm" class="hidden space-y-4">
-                <input type="text" id="signupUsername" placeholder="Create Username"
-                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-teal-500 transition-all">
-                <input type="password" id="signupPassword" placeholder="Create Password"
-                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-teal-500 transition-all">
-                <button id="signupBtn"
-                    class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20">Sign
-                    Up</button>
-                <div class="text-center">
-                    <button id="showLogin" class="text-sm text-slate-400 hover:text-teal-400 transition-all">Already
-                        have an account? Login</button>
-                </div>
+                <button id="enterBtn"
+                    class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-teal-500/20">Enter
+                    Portal</button>
             </div>
         </div>
     </div>
@@ -208,19 +207,20 @@
                         class="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto text-blue-400">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v8a2 2 0 002 2z">
                             </path>
                         </svg>
                     </div>
                     <input type="text" id="joinRoomId" placeholder="Meeting Code"
-                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center text-teal-400 font-mono focus:border-blue-500 transition-all">
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center text-teal-400 font-mono focus:border-blue-500 transition-all uppercase">
                     <button id="joinBtn"
-                        class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg font-semibold transition-all">Join</button>
+                        class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg font-semibold transition-all">Join
+                        Meeting</button>
                 </div>
             </div>
 
-            <button id="logoutBtn" class="text-slate-500 hover:text-slate-300 transition-all text-sm underline">Sign
-                out</button>
+            <button id="exitBtn" class="text-slate-500 hover:text-slate-300 transition-all text-sm underline">Change
+                Name</button>
         </div>
     </div>
 
@@ -235,9 +235,7 @@
                 </div>
                 <h1 class="text-xl font-bold ml-2">Unmute Meeting</h1>
             </div>
-            <div id="participantsList" class="flex -space-x-3">
-                <!-- Participant avatars could go here -->
-            </div>
+            <div id="participantsList" class="flex -space-x-3"></div>
         </div>
 
         <!-- Main Content: Video Grid -->
@@ -259,8 +257,7 @@
             class="absolute bottom-32 left-1/2 transform -translateX-1/2 w-full max-w-2xl px-4">
             <div
                 class="glass py-3 px-6 rounded-2xl border-teal-500/20 text-center text-slate-200 text-lg font-medium shadow-2xl">
-                <span class="text-teal-400 font-bold" id="speakerName"></span> <span
-                    id="transcriptionText">Transcription will appear here...</span>
+                <span class="text-teal-400 font-bold" id="speakerName"></span> <span id="transcriptionText"></span>
             </div>
         </div>
 

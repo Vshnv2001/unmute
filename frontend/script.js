@@ -1,16 +1,14 @@
-const API_URL = "/api/translate";
-const TRANSCRIBE_URL = "/api/transcribe";
+const BACKEND_URL = window.location.port === '3000' ? 'http://127.0.0.1:8000' : '';
+const API_URL = `${BACKEND_URL}/api/translate`;
+const TRANSCRIBE_URL = `${BACKEND_URL}/api/transcribe`;
 
 // DOM Elements
-const authSection = document.getElementById('authSection');
+const portalSection = document.getElementById('portalSection');
 const lobbySection = document.getElementById('lobbySection');
 const meetingSection = document.getElementById('meetingSection');
 
-const loginForm = document.getElementById('loginForm');
-const signupForm = document.getElementById('signupForm');
-const showSignup = document.getElementById('showSignup');
-const showLogin = document.getElementById('showLogin');
-
+const displayNameInput = document.getElementById('displayName');
+const enterBtn = document.getElementById('enterBtn');
 const userGreeting = document.getElementById('userGreeting');
 const displayRoomId = document.getElementById('displayRoomId');
 const videoGrid = document.getElementById('videoGrid');
@@ -18,9 +16,8 @@ const localVideo = document.getElementById('localVideo');
 const transcriptionText = document.getElementById('transcriptionText');
 const speakerName = document.getElementById('speakerName');
 
-// Meeting State
-let currentUser = null;
-let currentToken = localStorage.getItem('token');
+// App State
+let currentUser = localStorage.getItem('displayName');
 let currentRoomId = null;
 let localStream = null;
 let myPeer = null;
@@ -28,102 +25,62 @@ let peers = {};
 let socket = null;
 let transcriptionInterval = null;
 
-// --- Authentication UI Logic ---
+// --- Portal Entry Logic ---
 
-showSignup.onclick = () => { loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); };
-showLogin.onclick = () => { signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); };
-
-document.getElementById('signupBtn').onclick = async () => {
-    const username = document.getElementById('signupUsername').value;
-    const password = document.getElementById('signupPassword').value;
-    const res = await fetch('/api/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
-    if (res.ok) {
-        alert("Signup successful! Please login.");
-        showLogin.onclick();
+enterBtn.onclick = () => {
+    const name = displayNameInput.value.trim();
+    if (name) {
+        currentUser = name;
+        localStorage.setItem('displayName', name);
+        showLobby();
     } else {
-        const data = await res.json();
-        alert(data.detail || "Signup failed");
+        alert("Please enter a name to continue");
     }
 };
 
-document.getElementById('loginBtn').onclick = async () => {
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-
-    const res = await fetch('/api/token', {
-        method: 'POST',
-        body: formData
-    });
-
-    if (res.ok) {
-        const data = await res.json();
-        currentToken = data.access_token;
-        localStorage.setItem('token', currentToken);
-        initApp();
-    } else {
-        alert("Login failed");
-    }
-};
-
-document.getElementById('logoutBtn').onclick = () => {
-    localStorage.removeItem('token');
+document.getElementById('exitBtn').onclick = () => {
+    localStorage.removeItem('displayName');
     location.reload();
 };
 
-// --- App Initialization ---
-
-async function initApp() {
-    if (!currentToken) {
-        authSection.classList.remove('hidden');
-        lobbySection.classList.add('hidden');
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/rooms/join/test', { // Just checking auth
-            headers: { 'Authorization': `Bearer ${currentToken}` }
-        });
-
-        if (res.status === 401) throw new Error("Unauthorized");
-
-        // Success
-        const data = await res.json();
-        currentUser = data.username;
-        userGreeting.textContent = currentUser;
-
-        authSection.classList.add('hidden');
-        lobbySection.classList.remove('hidden');
-
-    } catch (e) {
-        localStorage.removeItem('token');
-        authSection.classList.remove('hidden');
-    }
+function showLobby() {
+    portalSection.classList.add('hidden');
+    lobbySection.classList.remove('hidden');
+    userGreeting.textContent = currentUser;
 }
 
 // --- Lobby Logic ---
 
 document.getElementById('createMeetingBtn').onclick = async () => {
-    const res = await fetch('/api/rooms/create', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${currentToken}` }
-    });
-    if (res.ok) {
-        const data = await res.json();
-        startMeeting(data.room_id);
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/rooms/create`, {
+            method: 'POST'
+        });
+        if (res.ok) {
+            const data = await res.json();
+            startMeeting(data.room_id);
+        } else {
+            console.error("Failed to create room");
+        }
+    } catch (e) {
+        console.error("Error creating meeting:", e);
     }
 };
 
-document.getElementById('joinBtn').onclick = () => {
-    const roomId = document.getElementById('joinRoomId').value.trim();
-    if (roomId) startMeeting(roomId);
+document.getElementById('joinBtn').onclick = async () => {
+    const roomId = document.getElementById('joinRoomId').value.trim().toUpperCase();
+    if (!roomId) return;
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/rooms/join/${roomId}`);
+        if (res.ok) {
+            startMeeting(roomId);
+        } else {
+            alert("Meeting room not found");
+        }
+    } catch (e) {
+        console.error("Error joining meeting:", e);
+    }
 };
 
 // --- Meeting Logic (WebRTC & SL) ---
@@ -136,17 +93,9 @@ async function startMeeting(roomId) {
 
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        addVideoStream(localVideo, localStream, 'localVideoContainer');
+        addVideoStream(localVideo, localStream, 'localVideoContainer', 'You');
 
         // Initialize Peer
-        myPeer = new Peer(undefined, {
-            host: '/',
-            port: '8000', // Uvicorn port
-            path: '/peerjs' // We'll need to support this or use default PeerJS cloud
-        });
-
-        // Actually PeerJS server is not built-in, so for local dev without a dedicated PeerServer,
-        // we'll use the default PeerJS cloud servers (remove parameters).
         myPeer = new Peer();
 
         myPeer.on('open', id => {
@@ -158,25 +107,26 @@ async function startMeeting(roomId) {
             call.answer(localStream);
             const video = document.createElement('video');
             call.on('stream', userVideoStream => {
-                addVideoStream(video, userVideoStream, call.peer);
+                // We'll get the name via signaling soon
+                addVideoStream(video, userVideoStream, call.peer, 'User');
             });
         });
 
-        // Start SL Intelligence Loop
         startSLIntelligence();
 
     } catch (e) {
         console.error("Failed to start meeting:", e);
         alert("Camera/Mic access required");
+        location.reload();
     }
 }
 
 function connectWebSocket(peerId) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${protocol}//${window.location.host}/ws/meeting/${currentRoomId}`);
+    const wsHost = window.location.port === '3000' ? '127.0.0.1:8000' : window.location.host;
+    socket = new WebSocket(`${protocol}//${wsHost}/ws/meeting/${currentRoomId}`);
 
     socket.onopen = () => {
-        // Announce myself to the room
         socket.send(JSON.stringify({
             type: 'join',
             peerId: peerId,
@@ -189,21 +139,20 @@ function connectWebSocket(peerId) {
 
         if (data.type === 'join' && data.peerId !== peerId) {
             // New user joined, call them
-            setTimeout(() => connectToNewUser(data.peerId, localStream), 1000);
+            setTimeout(() => connectToNewUser(data.peerId, data.username, localStream), 1000);
         }
 
         if (data.type === 'sl-update') {
-            // Show SL overlay for a specific user
             showSLOverlay(data.peerId, data.username, data.transcription, data.plan);
         }
     };
 }
 
-function connectToNewUser(peerId, stream) {
+function connectToNewUser(peerId, name, stream) {
     const call = myPeer.call(peerId, stream);
     const video = document.createElement('video');
     call.on('stream', userVideoStream => {
-        addVideoStream(video, userVideoStream, peerId);
+        addVideoStream(video, userVideoStream, peerId, name);
     });
     call.on('close', () => {
         const container = document.getElementById(peerId);
@@ -212,7 +161,7 @@ function connectToNewUser(peerId, stream) {
     peers[peerId] = call;
 }
 
-function addVideoStream(video, stream, containerId) {
+function addVideoStream(video, stream, containerId, labelText) {
     let container = document.getElementById(containerId);
     if (!container) {
         container = document.createElement('div');
@@ -221,7 +170,7 @@ function addVideoStream(video, stream, containerId) {
 
         const label = document.createElement('div');
         label.className = 'participant-label';
-        label.textContent = containerId === 'localVideoContainer' ? 'You' : 'User';
+        label.textContent = labelText;
 
         const slOverlay = document.createElement('div');
         slOverlay.className = 'sl-overlay';
@@ -233,6 +182,12 @@ function addVideoStream(video, stream, containerId) {
         container.appendChild(label);
         container.appendChild(slOverlay);
         videoGrid.append(container);
+    } else {
+        // Update label if it's already there but just "User"
+        const label = container.querySelector('.participant-label');
+        if (label && label.textContent === 'User' && labelText !== 'User') {
+            label.textContent = labelText;
+        }
     }
 
     video.srcObject = stream;
@@ -253,7 +208,6 @@ async function startSLIntelligence() {
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         audioChunks = [];
 
-        // 1. Transcribe
         const base64Audio = await blobToBase64(blob);
         const transRes = await fetch(TRANSCRIBE_URL, {
             method: 'POST',
@@ -266,7 +220,6 @@ async function startSLIntelligence() {
             const text = transData.transcription;
 
             if (text && text.trim().length > 2) {
-                // 2. Translate
                 const slRes = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -275,8 +228,6 @@ async function startSLIntelligence() {
 
                 if (slRes.ok) {
                     const slData = await slRes.json();
-
-                    // 3. Broadcast to Room
                     socket.send(JSON.stringify({
                         type: 'sl-update',
                         peerId: myPeer.id,
@@ -284,18 +235,13 @@ async function startSLIntelligence() {
                         transcription: text,
                         plan: slData.plan
                     }));
-
-                    // Also show locally for feedback
                     showSLOverlay(myPeer.id, currentUser, text, slData.plan);
                 }
             }
         }
-
-        // Continue loop if still in meeting
         if (currentRoomId) mediaRecorder.start();
     };
 
-    // Trigger every 4 seconds
     transcriptionInterval = setInterval(() => {
         if (mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -306,33 +252,27 @@ async function startSLIntelligence() {
 }
 
 function showSLOverlay(peerId, name, text, plan) {
-    // 1. Update Transcription Ticker
     speakerName.textContent = `${name}: `;
     transcriptionText.textContent = text;
 
-    // 2. Play SL Sequence on the Overlay
     const containerId = peerId === myPeer.id ? 'localVideoContainer' : peerId;
     const overlay = document.querySelector(`#sl-${containerId}`);
     if (!overlay) return;
 
     const img = overlay.querySelector('img');
     overlay.style.display = 'block';
-
-    // Play sequence
     playSLSequence(img, plan, overlay);
 }
 
 async function playSLSequence(imgElem, plan, overlayElem) {
     for (const item of plan) {
         if (item.type === 'sign' && item.assets.gif) {
-            imgElem.src = window.location.origin + item.assets.gif;
+            const assetBase = window.location.port === '3000' ? 'http://127.0.0.1:8000' : window.location.origin;
+            imgElem.src = assetBase + item.assets.gif;
             await new Promise(r => setTimeout(r, 2000));
         }
     }
-    // Hide overlay after sequence ends (with small delay)
-    setTimeout(() => {
-        overlayElem.style.display = 'none';
-    }, 1000);
+    setTimeout(() => { if (overlayElem) overlayElem.style.display = 'none'; }, 1000);
 }
 
 function blobToBase64(blob) {
@@ -363,4 +303,8 @@ document.getElementById('leaveBtn').onclick = () => {
 };
 
 // Initial Load
-initApp();
+if (currentUser) {
+    showLobby();
+} else {
+    portalSection.classList.remove('hidden');
+}
