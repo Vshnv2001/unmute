@@ -54,16 +54,40 @@ let currentCall = null;
 // Initialization
 initPeer();
 
-function initPeer() {
+async function initPeer() {
+    // Fetch ICE servers (STUN/TURN) from backend
+    // This includes free TURN servers to handle NAT traversal issues
+    let iceServers = [
+        // Default STUN servers as fallback
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+    ];
+    
+    try {
+        const response = await fetch('http://127.0.0.1:8000/api/webrtc/ice-servers');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.iceServers && data.iceServers.length > 0) {
+                iceServers = data.iceServers;
+                console.log('Fetched ICE servers from backend:', iceServers);
+            }
+        } else {
+            console.warn('Failed to fetch ICE servers from backend, using defaults');
+        }
+    } catch (error) {
+        console.warn('Error fetching ICE servers from backend:', error);
+        console.log('Using default STUN servers (TURN may not work without backend)');
+    }
+    
+    // Use public PeerJS server with proper STUN/TURN configuration
+    // STUN servers help with NAT traversal, TURN servers relay traffic when direct connection fails
     peer = new Peer({
-        host: '/',
-        port: 8000,
-        path: '/peerjs', // Note: This might need backend support if not using a public peer server
-        debug: 3
+        config: {
+            iceServers: iceServers
+        }
     });
-
-    // Fallback to public server if local fails (simpler for demo)
-    peer = new Peer();
 
     peer.on('open', (id) => {
         console.log('My peer ID is: ' + id);
@@ -78,26 +102,70 @@ function initPeer() {
                 localVideo.srcObject = stream;
                 call.answer(stream);
                 handleCall(call);
+            })
+            .catch((err) => {
+                console.error('Error accessing media devices:', err);
+                alert('Could not access camera/microphone. Please grant permissions.');
             });
     });
 
     peer.on('error', (err) => {
         console.error('PeerJS error:', err);
-        alert('PeerJS error: ' + err.type);
+        // Handle specific error types more gracefully
+        if (err.type === 'peer-unavailable') {
+            console.warn('Peer unavailable:', err.message);
+        } else if (err.type === 'network') {
+            alert('Network error: Could not connect to PeerJS server. Please check your internet connection.');
+        } else if (err.type === 'browser-incompatible') {
+            alert('Your browser does not support WebRTC. Please use a modern browser like Chrome, Firefox, or Safari.');
+        } else {
+            console.error('PeerJS error:', err.type, err.message);
+        }
     });
 }
 
 function handleCall(call) {
     currentCall = call;
+    
     call.on('stream', (remoteStream) => {
         console.log('Received remote stream');
         remoteVideo.srcObject = remoteStream;
         videoPlaceholder.classList.add('hidden');
     });
+    
     call.on('close', () => {
+        console.log('Call closed');
         remoteVideo.srcObject = null;
         videoPlaceholder.classList.remove('hidden');
     });
+    
+    call.on('error', (err) => {
+        console.error('Call error:', err);
+        // ICE failures often indicate network/NAT issues
+        if (err.message && err.message.includes('ICE')) {
+            alert('Connection failed: Unable to establish peer-to-peer connection. This may be due to network restrictions. Try:\n\n1. Check your firewall settings\n2. Ensure both peers are on the same network or have proper NAT traversal\n3. Consider using a TURN server for production use');
+        } else {
+            alert('Call error: ' + (err.message || err.type || 'Unknown error'));
+        }
+    });
+    
+    // Monitor ICE connection state
+    if (call.peerConnection) {
+        call.peerConnection.oniceconnectionstatechange = () => {
+            const state = call.peerConnection.iceConnectionState;
+            console.log('ICE connection state:', state);
+            
+            if (state === 'failed' || state === 'disconnected') {
+                console.warn('ICE connection failed or disconnected');
+                // The error handler above will catch this, but we log it here for debugging
+            }
+        };
+        
+        call.peerConnection.onicecandidateerror = (event) => {
+            console.error('ICE candidate error:', event);
+            // Log but don't alert - this is often just a warning about unreachable servers
+        };
+    }
 }
 
 // Mode switching
@@ -137,14 +205,28 @@ callBtn.addEventListener('click', () => {
         return;
     }
 
+    if (!peer || !peer.open) {
+        alert('PeerJS not ready. Please wait for connection.');
+        return;
+    }
+
     console.log('Calling ' + remoteId + '...');
     if (!localStream) {
         alert('Local stream not ready. Please ensure camera access is granted.');
         return;
     }
 
-    const call = peer.call(remoteId, localStream);
-    handleCall(call);
+    try {
+        const call = peer.call(remoteId, localStream);
+        if (!call) {
+            alert('Failed to initiate call. The peer may be unavailable.');
+            return;
+        }
+        handleCall(call);
+    } catch (err) {
+        console.error('Error initiating call:', err);
+        alert('Failed to start call: ' + (err.message || 'Unknown error'));
+    }
 });
 
 copyPeerIdBtn.addEventListener('click', () => {
