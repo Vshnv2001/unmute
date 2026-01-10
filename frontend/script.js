@@ -37,6 +37,7 @@ const retryRecordingBtn = document.getElementById('retryRecordingBtn');
 
 let currentPlan = [];
 let isPlaying = false;
+let currentGifCancel = null; // Function to cancel current GIF playback
 
 // Audio recording state
 let mediaRecorder = null;
@@ -344,6 +345,9 @@ async function playSequence(plan) {
     placeholder.classList.add('hidden');
     signPlayer.classList.remove('hidden');
     playerLabel.classList.remove('hidden');
+    
+    // Clear any previous GIF cancellation
+    currentGifCancel = null;
 
     // Debug: log the plan
     console.log('Plan received:', plan.map(p => p.sign_name || p.token));
@@ -408,14 +412,56 @@ async function playSequence(plan) {
 
                     console.log(`Playing: ${item.token} (${frames.length} total frames)`);
 
-                    // Play both at the same time, wait for BOTH to complete
-                    const skeletonPromise = avatar.playSequence(frames, 10);  // 10fps skeleton
-                    const gifPromise = new Promise(r => setTimeout(r, 4000));  // 4s for GIF
+                    // Create a cancellable GIF promise
+                    let gifCancel = null;
+                    const gifPromise = new Promise((resolve) => {
+                        const timeout = setTimeout(() => {
+                            resolve(false); // GIF completed normally
+                        }, 4000); // 4s for GIF
+                        
+                        gifCancel = () => {
+                            clearTimeout(timeout);
+                            resolve(true); // GIF was cancelled
+                        };
+                    });
+                    
+                    // Store cancel function so it can be called if skeleton goes blank
+                    currentGifCancel = gifCancel;
 
-                    // Wait for whichever takes longer
-                    await Promise.all([skeletonPromise, gifPromise]);
+                    // Play skeleton and check if it has valid frames
+                    let hasValidSkeleton = false;
+                    try {
+                        const skeletonPromise = avatar.playSequence(frames, 10);  // 10fps skeleton
+                        hasValidSkeleton = await skeletonPromise;
+                    } catch (e) {
+                        console.error(`Error playing skeleton for ${item.token}:`, e);
+                        hasValidSkeleton = false; // Treat errors as blank
+                    }
 
-                    console.log(`Finished: ${item.token}`);
+                    // If skeleton went blank or errored, cancel the GIF immediately
+                    if (!hasValidSkeleton) {
+                        console.log(`Skeleton went blank or errored for ${item.token}, stopping GIF`);
+                        if (gifCancel) {
+                            gifCancel();
+                        }
+                        // Stop the GIF immediately
+                        signPlayer.classList.add('hidden');
+                        signPlayer.src = '';
+                        // Clear the cancel function
+                        currentGifCancel = null;
+                        // Continue to next sign
+                        continue;
+                    }
+
+                    // Wait for GIF to complete (or be cancelled)
+                    const gifWasCancelled = await gifPromise;
+                    
+                    // Clear the cancel function
+                    currentGifCancel = null;
+
+                    if (!gifWasCancelled) {
+                        console.log(`Finished: ${item.token}`);
+                    }
 
                     // Hide GIF after both complete
                     signPlayer.classList.add('hidden');
@@ -444,6 +490,13 @@ async function playSequence(plan) {
     // Final cleanup
     placeholder.classList.remove('hidden');
     playerLabel.classList.add('hidden');
+    // Ensure GIF is stopped
+    if (currentGifCancel) {
+        currentGifCancel();
+        currentGifCancel = null;
+    }
+    signPlayer.classList.add('hidden');
+    signPlayer.src = '';
     isPlaying = false;
     console.log('Sequence complete');
 }

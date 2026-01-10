@@ -75,7 +75,7 @@ export class AvatarController {
         const matJoint = new THREE.MeshLambertMaterial({ color: 0xffff44 });
         
         // Line material for bones
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
 
         // Create 33 joint spheres
         for (let i = 0; i < 33; i++) {
@@ -112,7 +112,12 @@ export class AvatarController {
     }
 
     updateFrame(frame) {
-        if (!frame) return;
+        if (!frame) {
+            // Hide all joints and bones if no frame
+            this.joints.forEach(j => j.visible = false);
+            this.bones.forEach(b => b.line.visible = false);
+            return false; // Return false to indicate blank frame
+        }
 
         // frame = { pose: [[x,y,z]...] } - 33 landmarks
         const points = frame.pose;
@@ -121,7 +126,7 @@ export class AvatarController {
             // Hide all joints and bones if invalid data
             this.joints.forEach(j => j.visible = false);
             this.bones.forEach(b => b.line.visible = false);
-            return;
+            return false; // Return false to indicate blank frame
         }
 
         // Check if pose is present - look for ANY non-zero joint
@@ -133,7 +138,7 @@ export class AvatarController {
         if (!isPresent) {
             this.joints.forEach(j => j.visible = false);
             this.bones.forEach(b => b.line.visible = false);
-            return;
+            return false; // Return false to indicate blank frame
         }
 
         // MediaPipe Pose coordinates are normalized (x, y in [0, 1], z is relative depth)
@@ -188,14 +193,65 @@ export class AvatarController {
             b.line.geometry.attributes.position.needsUpdate = true;
             b.line.visible = true;
         });
+        
+        return true; // Return true to indicate valid frame with visible joints
     }
 
 
     async playSequence(frames, fps = 30) {
+        if (!frames || frames.length === 0) {
+            return false; // No frames = blank
+        }
+        
         const interval = 1000 / fps;
+        let hasValidFrames = false;
+        let consecutiveBlankFrames = 0;
+        const maxConsecutiveBlanks = 10; // If 10+ consecutive blank frames, consider it blank
+        const earlyCheckFrames = 5; // Check first 5 frames to detect if sequence is entirely blank
+        
+        // First, quickly check if the sequence starts with blank frames
+        let earlyBlankCount = 0;
+        for (let i = 0; i < Math.min(earlyCheckFrames, frames.length); i++) {
+            const frame = frames[i];
+            const points = frame?.pose;
+            const isPresent = points && Array.isArray(points) && points.length === 33 &&
+                points.some(p =>
+                    p && Array.isArray(p) && p.length >= 3 && 
+                    !isNaN(p[0]) && (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+                );
+            if (!isPresent) {
+                earlyBlankCount++;
+            }
+        }
+        
+        // If all early frames are blank, the sequence is likely entirely blank
+        if (earlyBlankCount === Math.min(earlyCheckFrames, frames.length)) {
+            console.log('Skeleton sequence appears to be entirely blank (detected early)');
+            // Still update the first frame to hide everything
+            this.updateFrame(frames[0]);
+            return false;
+        }
+        
+        // Play through frames
         for (const frame of frames) {
-            this.updateFrame(frame);
+            const isValid = this.updateFrame(frame);
+            
+            if (isValid) {
+                hasValidFrames = true;
+                consecutiveBlankFrames = 0;
+            } else {
+                consecutiveBlankFrames++;
+                // If we hit too many consecutive blanks after having valid frames, stop early
+                if (hasValidFrames && consecutiveBlankFrames >= maxConsecutiveBlanks) {
+                    console.log('Skeleton rendering went blank, stopping sequence early');
+                    break;
+                }
+            }
+            
             await new Promise(r => setTimeout(r, interval));
         }
+        
+        // Return whether we had any valid frames
+        return hasValidFrames;
     }
 }
