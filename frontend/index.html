@@ -4,8 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGSL Translator - Voice & Text</title>
+    <title>SGSL Translator - Voice & Video</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -47,16 +48,16 @@
             background: linear-gradient(135deg, #ef4444, #dc2626) !important;
         }
 
-        .mic-btn {
+        .btn-fancy {
             position: relative;
             transition: all 0.3s ease;
         }
 
-        .mic-btn:hover:not(.recording) {
+        .btn-fancy:hover:not(:disabled) {
             transform: scale(1.05);
         }
 
-        .mic-btn:active:not(.recording) {
+        .btn-fancy:active:not(:disabled) {
             transform: scale(0.95);
         }
 
@@ -107,23 +108,6 @@
             }
         }
 
-        /* Transcription text animation */
-        .transcription-text {
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(5px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
         /* Input mode tabs */
         .mode-tab {
             transition: all 0.3s ease;
@@ -131,6 +115,7 @@
 
         .mode-tab.active {
             background: linear-gradient(135deg, #14b8a6, #3b82f6);
+            color: white !important;
         }
 
         .mode-tab:not(.active):hover {
@@ -154,6 +139,29 @@
             border-color: #14b8a6;
             background: rgba(20, 184, 166, 0.1);
         }
+
+        /* Video Container Styles */
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #0f172a;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            z-index: 10;
+        }
     </style>
 </head>
 
@@ -162,50 +170,38 @@
     <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
         <h1
             class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
-            Text to SGSL
+            Unmute: SGSL Voice & Video
         </h1>
-        <p class="text-slate-400 text-center mb-6">Singapore Sign Language Translator (Demo)</p>
+        <p class="text-slate-400 text-center mb-6">Singapore Sign Language Communication (WebRTC Demo)</p>
 
         <!-- Input Mode Tabs -->
         <div class="flex justify-center mb-6">
             <div class="bg-slate-900/50 p-1 rounded-xl flex gap-1 border border-slate-700">
-                <button id="textModeTab"
-                    class="mode-tab active px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Text
-                </button>
                 <button id="voiceModeTab"
-                    class="mode-tab px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 text-slate-400">
+                    class="mode-tab active px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                     </svg>
                     Voice
                 </button>
+                <button id="videoModeTab"
+                    class="mode-tab px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 text-slate-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Video
+                </button>
             </div>
         </div>
 
-        <!-- Text Input Section -->
-        <div id="textInputSection" class="space-y-4">
-            <textarea id="inputText"
-                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder-slate-600 resize-none"
-                rows="3" placeholder="Type here... (e.g., 'I want apple')"></textarea>
-
-            <button id="translateBtn"
-                class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg">
-                Translate
-            </button>
-        </div>
-
         <!-- Voice Input Section -->
-        <div id="voiceInputSection" class="hidden space-y-4">
+        <div id="voiceInputSection" class="space-y-4">
             <!-- Microphone Button -->
             <div class="flex flex-col items-center justify-center py-6">
                 <button id="micBtn"
-                    class="mic-btn w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-teal-500/25 mb-4">
+                    class="btn-fancy mic-btn w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-teal-500/25 mb-4">
                     <svg id="micIcon" class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -268,6 +264,52 @@
                         </svg>
                         Retry
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Input Section -->
+        <div id="videoInputSection" class="hidden space-y-6">
+            <div class="bg-slate-900/50 p-6 rounded-xl border border-slate-700 space-y-4">
+                <div class="flex items-center justify-between bg-slate-800 p-4 rounded-lg">
+                    <div class="flex flex-col">
+                        <span class="text-xs text-slate-500 uppercase font-bold">Your Peer ID</span>
+                        <span id="myPeerId" class="text-teal-400 font-mono text-lg">Initializing...</span>
+                    </div>
+                    <button id="copyPeerId" class="text-slate-400 hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" id="remotePeerId" placeholder="Enter remote Peer ID to call..."
+                        class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 outline-none focus:border-teal-500 transition-colors">
+                    <button id="callBtn"
+                        class="bg-teal-600 hover:bg-teal-500 px-6 py-2 rounded-lg font-bold transition-all btn-fancy">
+                        Call
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="video-container aspect-video">
+                    <div class="video-label">Local Stream</div>
+                    <video id="localVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                </div>
+                <div class="video-container aspect-video">
+                    <div class="video-label">Remote Stream</div>
+                    <video id="remoteVideo" autoplay playsinline
+                        class="w-full h-full object-cover bg-slate-950"></video>
+                    <div id="videoPlaceholder"
+                        class="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none">
+                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </div>
                 </div>
             </div>
         </div>
