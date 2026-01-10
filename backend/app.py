@@ -81,11 +81,32 @@ def translate(req: GlossRequest):
 
 @app.get("/api/sign/{sign_name}/landmarks")
 def get_landmarks(sign_name: str):
-    """Return 3D landmark frames for a sign."""
-    data = sign_mgr.get_sign_frames(sign_name)
-    if not data:
+    """Return 3D landmark frames for a sign (both hand and pose data if available)."""
+    hand_data = sign_mgr.get_sign_frames(sign_name)
+    pose_data = sign_mgr.get_sign_pose_frames(sign_name)
+    
+    if not hand_data and not pose_data:
         raise HTTPException(status_code=404, detail="Sign data not found")
-    return data
+    
+    response = {}
+    
+    if hand_data:
+        response["hand_frames"] = hand_data.get("frames", [])
+        response["L_orig"] = hand_data.get("L_orig")
+        response["L_max"] = hand_data.get("L_max")
+    else:
+        response["hand_frames"] = None
+    
+    if pose_data:
+        response["pose_frames"] = pose_data.get("frames", [])
+        # Use pose data for L_orig and L_max if hand data is not available
+        if not hand_data:
+            response["L_orig"] = pose_data.get("L_orig")
+            response["L_max"] = pose_data.get("L_max")
+    else:
+        response["pose_frames"] = None
+    
+    return response
 
 
 class TranscribeRequest(BaseModel):

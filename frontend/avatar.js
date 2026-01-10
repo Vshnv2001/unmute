@@ -6,8 +6,8 @@ export class AvatarController {
         this.scene = null;
         this.camera = null;
         this.renderer = null;
-        this.joints = { left: [], right: [] }; // Spheres
-        this.bones = { left: [], right: [] };  // Lines
+        this.joints = []; // 33 pose joints (spheres)
+        this.bones = [];  // Pose bone connections (lines)
         this.initScene();
         this.createRig();
         this.animate();
@@ -52,45 +52,62 @@ export class AvatarController {
     }
 
     createRig() {
-        // Hand Topology (Connections)
-        // 0:Wrist, 1-4:Thumb, 5-8:Index, 9-12:Middle, 13-16:Ring, 17-20:Pinky
+        // MediaPipe Pose Topology (Connections)
+        // Based on MediaPipe Pose landmark structure (33 landmarks)
         this.connections = [
-            [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
-            [0, 5], [5, 6], [6, 7], [7, 8],       // Index
-            [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
-            [0, 13], [13, 14], [14, 15], [15, 16],// Ring
-            [0, 17], [17, 18], [18, 19], [19, 20] // Pinky
+            // Face
+            [0, 1], [1, 2], [2, 3], [3, 7],  // Left eye
+            [0, 4], [4, 5], [5, 6], [6, 8],  // Right eye
+            [9, 10],  // Mouth
+            // Upper body
+            [11, 12],  // Shoulders
+            [11, 13], [13, 15],  // Left arm
+            [12, 14], [14, 16],  // Right arm
+            [11, 23], [12, 24],  // Shoulder to hip
+            [23, 24],  // Hips
+            // Lower body
+            [23, 25], [25, 27],  // Left leg
+            [24, 26], [26, 28],  // Right leg
         ];
 
-        // Create Joints (Spheres)
-        const geometry = new THREE.SphereGeometry(0.012, 8, 8);
-        const matLeft = new THREE.MeshLambertMaterial({ color: 0x00ff88 });
-        const matRight = new THREE.MeshLambertMaterial({ color: 0xff6644 });
-        const lineMatLeft = new THREE.LineBasicMaterial({ color: 0x00ff88 });
-        const lineMatRight = new THREE.LineBasicMaterial({ color: 0xff6644 });
+        // Create Joints (Spheres) - 33 joints for MediaPipe Pose
+        const geometry = new THREE.SphereGeometry(0.015, 8, 8);
+        
+        // Color scheme: head (blue), upper body (green), lower body (red), joints (yellow)
+        const matHead = new THREE.MeshLambertMaterial({ color: 0x4488ff });
+        const matUpperBody = new THREE.MeshLambertMaterial({ color: 0x00ff88 });
+        const matLowerBody = new THREE.MeshLambertMaterial({ color: 0xff6644 });
+        const matJoint = new THREE.MeshLambertMaterial({ color: 0xffff44 });
+        
+        // Line material for bones
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
 
-        ['left', 'right'].forEach(side => {
-            const mat = side === 'left' ? matLeft : matRight;
-            const lineMat = side === 'left' ? lineMatLeft : lineMatRight;
-
-            // 21 Joint Spheres
-            for (let i = 0; i < 21; i++) {
-                const mesh = new THREE.Mesh(geometry, mat);
-                mesh.visible = false;
-                this.scene.add(mesh);
-                this.joints[side].push(mesh);
+        // Create 33 joint spheres
+        for (let i = 0; i < 33; i++) {
+            let mat;
+            if (i <= 10) {
+                mat = matHead;  // Head landmarks (0-10)
+            } else if (i <= 28) {
+                mat = matUpperBody;  // Upper body and visible lower body
+            } else {
+                mat = matJoint;  // Feet landmarks (29-32)
             }
+            
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.visible = false;
+            this.scene.add(mesh);
+            this.joints.push(mesh);
+        }
 
-            // 20 Bone Lines
-            this.connections.forEach(conn => {
-                const lineGeom = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)
-                ]);
-                const line = new THREE.Line(lineGeom, lineMat);
-                line.visible = false;
-                this.scene.add(line);
-                this.bones[side].push({ line, start: conn[0], end: conn[1] });
-            });
+        // Create bone connections
+        this.connections.forEach(conn => {
+            const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)
+            ]);
+            const line = new THREE.Line(lineGeom, lineMat);
+            line.visible = false;
+            this.scene.add(line);
+            this.bones.push({ line, start: conn[0], end: conn[1] });
         });
     }
 
@@ -102,68 +119,79 @@ export class AvatarController {
     updateFrame(frame) {
         if (!frame) return;
 
-        // frame = { left: [[x,y,z]...], right: [[x,y,z]...] }
-        ['left', 'right'].forEach(side => {
-            const points = frame[side]; // Array of 21 [x,y,z]
-            const joints = this.joints[side];
-            const bones = this.bones[side];
+        // frame = { pose: [[x,y,z]...] } - 33 landmarks
+        const points = frame.pose;
+        
+        if (!points || !Array.isArray(points) || points.length !== 33) {
+            // Hide all joints and bones if invalid data
+            this.joints.forEach(j => j.visible = false);
+            this.bones.forEach(b => b.line.visible = false);
+            return;
+        }
 
-            // Check if hand is present - look for ANY non-zero joint, not just wrist
-            const isPresent = points && points.some(p =>
-                p && !isNaN(p[0]) && (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+        // Check if pose is present - look for ANY non-zero joint
+        const isPresent = points.some(p =>
+            p && Array.isArray(p) && p.length >= 3 && 
+            !isNaN(p[0]) && (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+        );
+
+        if (!isPresent) {
+            this.joints.forEach(j => j.visible = false);
+            this.bones.forEach(b => b.line.visible = false);
+            return;
+        }
+
+        // MediaPipe Pose coordinates are normalized (x, y in [0, 1], z is relative depth)
+        // We need to scale and center them appropriately
+        // Scale factor to fit in the scene nicely
+        const scale = 1.5;  // Scale up from normalized [0,1] range
+        const zScale = 0.5;   // Scale depth (z is relative, usually smaller)
+
+        // First, hide all joints
+        this.joints.forEach(j => j.visible = false);
+
+        // Update Joints
+        for (let i = 0; i < 33; i++) {
+            const p = points[i];
+            const j = this.joints[i];
+
+            // Skip if this joint is zero or invalid
+            if (!p || !Array.isArray(p) || p.length < 3 ||
+                (p[0] === 0 && p[1] === 0 && p[2] === 0)) {
+                continue;
+            }
+
+            // Transform coordinates
+            // MediaPipe uses: x, y in [0, 1] (image coordinates), z is relative depth
+            // We flip Y because MediaPipe origin is top-left, but 3D is bottom-left
+            j.position.set(
+                (p[0] - 0.5) * scale,      // X: center and scale
+                (-(p[1] - 0.5)) * scale,   // Y: flip, center and scale (MediaPipe origin is top-left)
+                -p[2] * zScale              // Z: depth (negative to move away from camera)
             );
+            j.visible = true;
+        }
 
-            if (!isPresent) {
-                joints.forEach(j => j.visible = false);
-                bones.forEach(b => b.line.visible = false);
+        // Update Bones
+        this.bones.forEach(b => {
+            const jStart = this.joints[b.start];
+            const jEnd = this.joints[b.end];
+
+            // Only show bone if both joints are visible
+            if (!jStart.visible || !jEnd.visible) {
+                b.line.visible = false;
                 return;
             }
 
-            // Update Joints
-            for (let i = 0; i < 21; i++) {
-                const p = points[i];
-                const j = joints[i];
+            const pStart = jStart.position;
+            const pEnd = jEnd.position;
+            const positions = b.line.geometry.attributes.position.array;
 
-                // Skip if this joint is zero
-                if (p[0] === 0 && p[1] === 0 && p[2] === 0) {
-                    j.visible = false;
-                    continue;
-                }
+            positions[0] = pStart.x; positions[1] = pStart.y; positions[2] = pStart.z;
+            positions[3] = pEnd.x; positions[4] = pEnd.y; positions[5] = pEnd.z;
 
-                // The pkl data is already centered around 0 (not 0-1 range)
-                // Scale down and center for better viewing
-                const scale = 0.5;  // Make hands smaller
-                const xOff = side === 'left' ? -0.2 : 0.2;
-                const yOff = -0.15;  // Push hands lower
-                j.position.set(
-                    (p[0] * scale) + xOff,   // X scaled and offset by side
-                    (-p[1] * scale) + yOff,  // Flip Y, push lower
-                    -p[2] * scale * 0.3      // Scale Z (depth)
-                );
-                j.visible = true;
-            }
-
-            // Update Bones
-            bones.forEach(b => {
-                const jStart = joints[b.start];
-                const jEnd = joints[b.end];
-
-                // Only show bone if both joints are visible
-                if (!jStart.visible || !jEnd.visible) {
-                    b.line.visible = false;
-                    return;
-                }
-
-                const pStart = jStart.position;
-                const pEnd = jEnd.position;
-                const positions = b.line.geometry.attributes.position.array;
-
-                positions[0] = pStart.x; positions[1] = pStart.y; positions[2] = pStart.z;
-                positions[3] = pEnd.x; positions[4] = pEnd.y; positions[5] = pEnd.z;
-
-                b.line.geometry.attributes.position.needsUpdate = true;
-                b.line.visible = true;
-            });
+            b.line.geometry.attributes.position.needsUpdate = true;
+            b.line.visible = true;
         });
     }
 

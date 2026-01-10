@@ -7,6 +7,7 @@ import numpy as np
 import mediapipe as mp
 from PIL import Image
 from datetime import datetime
+from multiprocessing import Pool, cpu_count
 
 def discover_sign_folders(dataset_root):
     """List all subdirectories in dataset_root."""
@@ -89,6 +90,33 @@ def run_mediapipe_hands(frames, hands_solution):
         
     return X_raw
 
+def run_mediapipe_pose(frames, pose_solution):
+    """
+    Run MediaPipe Pose on a list of frames.
+    Returns: (L, 99) numpy array with raw coordinates.
+             L = number of frames
+             99 = 33 landmarks * 3 coords (x, y, z)
+    """
+    L = len(frames)
+    X_raw = np.zeros((L, 99), dtype=np.float32)
+    
+    for i, frame in enumerate(frames):
+        results = pose_solution.process(frame)
+        
+        # Default zero array for pose landmarks
+        pose_landmarks = np.zeros((33, 3), dtype=np.float32)
+        
+        if results.pose_landmarks:
+            # Extract coords (x, y, z) for all 33 pose landmarks
+            pose_landmarks = np.array([[lm.x, lm.y, lm.z] for lm in results.pose_landmarks.landmark], dtype=np.float32)
+        
+        # Flatten and store: [x0, y0, z0, x1, y1, z1, ... x32, y32, z32]
+        # 33*3 = 99
+        vec = pose_landmarks.flatten()
+        X_raw[i] = vec
+        
+    return X_raw
+
 def normalize_sequence(X_raw):
     """
     Normalize landmarks for avatar replay.
@@ -131,12 +159,128 @@ def normalize_sequence(X_raw):
             
     return X_norm.reshape(L, 126)
 
+def process_single_sign(args_tuple):
+    """
+    Worker function to process a single sign.
+    Creates MediaPipe solutions in this process and processes the sign.
+    
+    Args:
+        args_tuple: (sign_folder, gif_path, output_dir, max_len)
+    
+    Returns:
+        sign_name if successful, None otherwise
+    """
+    sf, gif_path, output_dir, max_len = args_tuple
+    sign_name = os.path.basename(sf)
+    
+    try:
+        # Create MediaPipe solutions in this worker process
+        mp_hands = mp.solutions.hands.Hands(
+            static_image_mode=False,
+            max_num_hands=2,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        mp_pose = mp.solutions.pose.Pose(
+            static_image_mode=False,
+            model_complexity=1,
+            enable_segmentation=False,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        # Find JSON file
+        _, json_path = find_gif_and_json(sf)
+        
+        # Load JSON meta
+        meta_data = {}
+        if json_path:
+            try:
+                with open(json_path, 'r') as f:
+                    meta_data = json.load(f)
+            except:
+                pass
+        
+        # Load Frames
+        frames = load_gif_frames(gif_path)
+        if not frames:
+            mp_hands.close()
+            mp_pose.close()
+            return None
+        
+        # Run MediaPipe Hands
+        X_raw = run_mediapipe_hands(frames, mp_hands)
+        
+        # Normalize
+        X_norm = normalize_sequence(X_raw)
+        
+        # Pad to L_max
+        L_curr = X_norm.shape[0]
+        if L_curr < max_len:
+            padding = np.zeros((max_len - L_curr, 126), dtype=np.float32)
+            X_final = np.concatenate([X_norm, padding], axis=0)
+        else:
+            X_final = X_norm[:max_len]
+        
+        # Save hand landmarks PKL
+        out_path = os.path.join(output_dir, "landmarks_pkl", f"{sign_name}.pkl")
+        payload = {
+            "sign": sign_name,
+            "X": X_final,
+            "L_orig": L_curr,
+            "L_max": max_len,
+            "meta": meta_data
+        }
+        
+        with open(out_path, 'wb') as f:
+            pickle.dump(payload, f)
+        
+        # Run MediaPipe Pose for full body
+        X_pose_raw = run_mediapipe_pose(frames, mp_pose)
+        
+        # Pad pose data to L_max (raw coordinates, no normalization)
+        L_pose_curr = X_pose_raw.shape[0]
+        if L_pose_curr < max_len:
+            pose_padding = np.zeros((max_len - L_pose_curr, 99), dtype=np.float32)
+            X_pose_final = np.concatenate([X_pose_raw, pose_padding], axis=0)
+        else:
+            X_pose_final = X_pose_raw[:max_len]
+        
+        # Save full body pose PKL
+        pose_out_path = os.path.join(output_dir, "landmarks_pkl", f"{sign_name}_full_body_pose.pkl")
+        pose_payload = {
+            "sign": sign_name,
+            "X": X_pose_final,
+            "L_orig": L_pose_curr,
+            "L_max": max_len,
+            "meta": meta_data
+        }
+        
+        with open(pose_out_path, 'wb') as f:
+            pickle.dump(pose_payload, f)
+        
+        # Cleanup
+        mp_hands.close()
+        mp_pose.close()
+        
+        return sign_name
+        
+    except Exception as e:
+        print(f"Error processing {sign_name}: {e}")
+        return None
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="sgsl_dataset", help="Path to input dataset")
     parser.add_argument("--output", default="sgsl_processed", help="Path to output directory")
     parser.add_argument("--limit", type=int, default=None, help="Max signs to process (for testing)")
+    parser.add_argument("--workers", type=int, default=None, help="Number of worker processes (default: CPU count)")
     args = parser.parse_args()
+    
+    # Determine number of workers
+    num_workers = args.workers if args.workers else cpu_count()
+    print(f"Using {num_workers} worker processes")
     
     # Setup Output
     os.makedirs(os.path.join(args.output, "landmarks_pkl"), exist_ok=True)
@@ -180,17 +324,14 @@ def main():
         print("No valid GIFs found.")
         return
 
-    # Pass 2: Process
+    # Pass 2: Process with multiprocessing
     print("Pass 2: Processing...")
     
-    mp_hands = mp.solutions.hands.Hands(
-        static_image_mode=False,
-        max_num_hands=2,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
-    
-    processed_count = 0
+    # Prepare arguments for worker function
+    worker_args = [
+        (sf, gif_path, args.output, max_len)
+        for sf, gif_path in valid_folders
+    ]
     
     meta_record = {
         "L_max": max_len,
@@ -198,58 +339,22 @@ def main():
         "signs": []
     }
     
-    for sf, gif_path in valid_folders:
-        sign_name = os.path.basename(sf)
-        _, json_path = find_gif_and_json(sf)
+    # Process signs in parallel
+    processed_count = 0
+    with Pool(processes=num_workers) as pool:
+        # Use imap_unordered for progress tracking
+        results = pool.imap_unordered(process_single_sign, worker_args)
         
-        # Load JSON meta
-        meta_data = {}
-        if json_path:
-            try:
-                with open(json_path, 'r') as f:
-                    meta_data = json.load(f)
-            except:
-                pass
+        for sign_name in results:
+            if sign_name is not None:
+                meta_record["signs"].append(sign_name)
+                processed_count += 1
                 
-        # Load Frames
-        frames = load_gif_frames(gif_path)
-        if not frames:
-            continue
-            
-        # Run MediaPipe
-        X_raw = run_mediapipe_hands(frames, mp_hands)
-        
-        # Normalize
-        X_norm = normalize_sequence(X_raw)
-        
-        # Pad to L_max
-        L_curr = X_norm.shape[0]
-        if L_curr < max_len:
-            padding = np.zeros((max_len - L_curr, 126), dtype=np.float32)
-            X_final = np.concatenate([X_norm, padding], axis=0)
-        else:
-            X_final = X_norm[:max_len]
-            
-        # Save PKL
-        out_path = os.path.join(args.output, "landmarks_pkl", f"{sign_name}.pkl")
-        payload = {
-            "sign": sign_name,
-            "X": X_final,
-            "L_orig": L_curr,
-            "L_max": max_len,
-            "meta": meta_data
-        }
-        
-        with open(out_path, 'wb') as f:
-            pickle.dump(payload, f)
-            
-        meta_record["signs"].append(sign_name)
-        processed_count += 1
-        
-        if processed_count % 10 == 0:
-            print(f"Processed {processed_count} signs...")
-            
-    mp_hands.close()
+                if processed_count % 10 == 0:
+                    print(f"Processed {processed_count}/{len(valid_folders)} signs...")
+    
+    # Sort signs for consistent output
+    meta_record["signs"].sort()
     
     # Save Global Meta
     with open(os.path.join(args.output, "meta.json"), 'w') as f:

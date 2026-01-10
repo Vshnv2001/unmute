@@ -383,26 +383,46 @@ async function playSequence(plan) {
                 const resp = await fetch(`${LANDMARKS_URL}/${item.sign_name}/landmarks`);
                 if (resp.ok) {
                     const data = await resp.json();
-                    console.log(`Playing skeleton: ${item.token} (${data.frames.length} frames)`);
+                    
+                    // Prefer pose_frames if available, fallback to hand_frames
+                    let frames = null;
+                    if (data.pose_frames && Array.isArray(data.pose_frames) && data.pose_frames.length > 0) {
+                        frames = data.pose_frames;
+                        console.log(`Playing pose skeleton: ${item.token} (${frames.length} frames)`);
+                    } else if (data.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
+                        frames = data.hand_frames;
+                        console.log(`Playing hand skeleton: ${item.token} (${frames.length} frames)`);
+                    } else if (data.frames && Array.isArray(data.frames) && data.frames.length > 0) {
+                        // Fallback to old format if new format not available
+                        frames = data.frames;
+                        console.log(`Playing skeleton (legacy format): ${item.token} (${frames.length} frames)`);
+                    }
+                    
+                    if (!frames) {
+                        console.warn(`No frame data available for ${item.sign_name}`);
+                        await new Promise(r => setTimeout(r, 2000));
+                        signPlayer.classList.add('hidden');
+                        signPlayer.src = '';
+                        continue;
+                    }
 
-                    // Start skeleton animation
-                    const skeletonPromise = avatar.playSequence(data.frames, 30);
+                    console.log(`Playing: ${item.token} (${frames.length} total frames)`);
 
-                    // Hide GIF after ~3 seconds (typical GIF duration) to prevent visual looping
-                    const gifHidePromise = new Promise(resolve => {
-                        setTimeout(() => {
-                            signPlayer.classList.add('hidden');
-                            signPlayer.src = '';
-                            resolve();
-                        }, 3000);
-                    });
+                    // Play both at the same time, wait for BOTH to complete
+                    const skeletonPromise = avatar.playSequence(frames, 10);  // 10fps skeleton
+                    const gifPromise = new Promise(r => setTimeout(r, 4000));  // 4s for GIF
 
-                    // Wait for skeleton to finish (GIF will hide after 3s)
-                    await skeletonPromise;
-                    console.log(`Finished skeleton: ${item.token}`);
+                    // Wait for whichever takes longer
+                    await Promise.all([skeletonPromise, gifPromise]);
+
+                    console.log(`Finished: ${item.token}`);
+
+                    // Hide GIF after both complete
+                    signPlayer.classList.add('hidden');
+                    signPlayer.src = '';
                 } else {
                     console.warn(`No 3D data for ${item.sign_name}`);
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 4000));
                     signPlayer.classList.add('hidden');
                     signPlayer.src = '';
                 }
