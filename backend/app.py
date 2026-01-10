@@ -24,6 +24,7 @@ app.add_middleware(
 # Mount sgsl_dataset to /static/sgsl_dataset
 DATASET_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_dataset")
 PROCESSED_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_processed")
+FRONTEND_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 
 if os.path.exists(DATASET_PATH):
     app.mount("/static/sgsl_dataset", StaticFiles(directory=DATASET_PATH), name="sgsl_dataset")
@@ -74,3 +75,39 @@ def translate(req: GlossRequest):
         "plan": plan,
         "notes": gloss_result.get("notes")
     }
+
+
+class TranscribeRequest(BaseModel):
+    audio_data: str  # Base64 encoded audio
+    mime_type: str = "audio/webm"
+
+
+class TranscribeResponse(BaseModel):
+    transcription: str
+
+
+@app.post("/api/transcribe", response_model=TranscribeResponse)
+def transcribe_audio(req: TranscribeRequest):
+    """
+    Transcribe audio to text using Gemini.
+    """
+    print(f"Received transcription request (audio mime_type: {req.mime_type})")
+    
+    # Transcribe audio using Gemini
+    result = gemini.transcribe_audio(req.audio_data, req.mime_type)
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    transcription = result.get("transcription", "")
+    print(f"Transcription: {transcription}")
+    
+    return {"transcription": transcription}
+
+
+# Mount frontend LAST (so it doesn't override API routes)
+# This serves the frontend at http://127.0.0.1:8000/
+if os.path.exists(FRONTEND_PATH):
+    app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
+
+
