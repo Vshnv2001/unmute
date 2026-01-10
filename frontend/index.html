@@ -1,38 +1,280 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGSL Translator</title>
+    <title>SGSL Translator - Voice & Text</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Outfit', sans-serif; }
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Microphone button animations */
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.4;
+            }
+
+            100% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes recording-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            50% {
+                box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+            }
+        }
+
+        .recording {
+            animation: recording-pulse 1.5s infinite;
+            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+        }
+
+        .mic-btn {
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .mic-btn:hover:not(.recording) {
+            transform: scale(1.05);
+        }
+
+        .mic-btn:active:not(.recording) {
+            transform: scale(0.95);
+        }
+
+        /* Audio wave visualization */
+        .audio-wave {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 24px;
+        }
+
+        .audio-wave .bar {
+            width: 4px;
+            background: linear-gradient(to top, #14b8a6, #3b82f6);
+            border-radius: 2px;
+            animation: wave 0.5s ease-in-out infinite;
+        }
+
+        .audio-wave .bar:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .audio-wave .bar:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .audio-wave .bar:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+        .audio-wave .bar:nth-child(4) {
+            animation-delay: 0.3s;
+        }
+
+        .audio-wave .bar:nth-child(5) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes wave {
+
+            0%,
+            100% {
+                height: 8px;
+            }
+
+            50% {
+                height: 24px;
+            }
+        }
+
+        /* Transcription text animation */
+        .transcription-text {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Input mode tabs */
+        .mode-tab {
+            transition: all 0.3s ease;
+        }
+
+        .mode-tab.active {
+            background: linear-gradient(135deg, #14b8a6, #3b82f6);
+        }
+
+        .mode-tab:not(.active):hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Editable transcription */
+        .editable-transcription {
+            background: transparent;
+            border: 1px dashed rgba(20, 184, 166, 0.5);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #5eead4;
+            font-size: 1.125rem;
+            width: 100%;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .editable-transcription:focus {
+            border-color: #14b8a6;
+            background: rgba(20, 184, 166, 0.1);
+        }
     </style>
 </head>
+
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
 
     <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
-        <h1 class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+        <h1
+            class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
             Text to SGSL
         </h1>
-        <p class="text-slate-400 text-center mb-8">Singapore Sign Language Translator (Demo)</p>
+        <p class="text-slate-400 text-center mb-6">Singapore Sign Language Translator (Demo)</p>
 
-        <!-- Input Section -->
-        <div class="space-y-4">
-            <textarea id="inputText" 
-                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder-slate-600"
+        <!-- Input Mode Tabs -->
+        <div class="flex justify-center mb-6">
+            <div class="bg-slate-900/50 p-1 rounded-xl flex gap-1 border border-slate-700">
+                <button id="textModeTab"
+                    class="mode-tab active px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Text
+                </button>
+                <button id="voiceModeTab"
+                    class="mode-tab px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 text-slate-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    Voice
+                </button>
+            </div>
+        </div>
+
+        <!-- Text Input Section -->
+        <div id="textInputSection" class="space-y-4">
+            <textarea id="inputText"
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder-slate-600 resize-none"
                 rows="3" placeholder="Type here... (e.g., 'I want apple')"></textarea>
-            
-            <button id="translateBtn" 
+
+            <button id="translateBtn"
                 class="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg">
                 Translate
             </button>
         </div>
 
+        <!-- Voice Input Section -->
+        <div id="voiceInputSection" class="hidden space-y-4">
+            <!-- Microphone Button -->
+            <div class="flex flex-col items-center justify-center py-6">
+                <button id="micBtn"
+                    class="mic-btn w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-teal-500/25 mb-4">
+                    <svg id="micIcon" class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    <svg id="stopIcon" class="w-10 h-10 hidden" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                </button>
+
+                <p id="micStatus" class="text-slate-400 text-sm font-medium">Click to start recording</p>
+
+                <!-- Audio Wave Visualization (shown when recording) -->
+                <div id="audioWave" class="audio-wave hidden mt-4">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+            </div>
+
+            <!-- Processing Status -->
+            <div id="processingStatus" class="hidden text-center py-4">
+                <div
+                    class="inline-flex items-center gap-3 bg-slate-900/50 px-6 py-3 rounded-xl border border-slate-700">
+                    <svg class="animate-spin w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                    </svg>
+                    <span id="processingText" class="text-slate-300 font-medium">Processing audio...</span>
+                </div>
+            </div>
+
+            <!-- Transcription Review Section -->
+            <div id="transcriptionReviewSection"
+                class="hidden bg-slate-900/50 rounded-xl p-5 border border-slate-700 space-y-4">
+                <div>
+                    <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">Transcription (edit if needed)
+                    </h3>
+                    <input type="text" id="transcriptionInput" class="editable-transcription"
+                        placeholder="Transcribed text will appear here...">
+                </div>
+
+                <div class="flex gap-3">
+                    <button id="confirmTranscriptionBtn"
+                        class="flex-1 bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Confirm & Translate
+                    </button>
+                    <button id="retryRecordingBtn"
+                        class="px-6 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Retry
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Output Section -->
         <div id="outputSection" class="mt-8 hidden space-y-6">
-            
+
             <!-- Gloss Display -->
             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                 <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">SGSL Gloss Structure</h3>
@@ -42,20 +284,29 @@
             </div>
 
             <!-- Player -->
-            <div class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
+            <div
+                class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
                 <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
                 <div id="placeholder" class="text-slate-600 flex flex-col items-center">
-                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                        </path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     <span class="text-sm">Video Area</span>
                 </div>
-                
+
                 <!-- Controls -->
                 <div class="absolute bottom-4 right-4 space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button id="replayBtn" class="bg-white/10 hover:bg-white/20 backdrop-blur px-3 py-1 rounded text-sm">Replay</button>
+                    <button id="replayBtn"
+                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-3 py-1 rounded text-sm">Replay</button>
                 </div>
-                
+
                 <!-- Overlay Label -->
-                 <div id="playerLabel" class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
+                <div id="playerLabel"
+                    class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
                     TOKEN
                 </div>
             </div>
@@ -68,4 +319,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

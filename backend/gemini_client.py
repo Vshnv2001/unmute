@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import google.generativeai as genai
 from typing import List, Dict, Any
 import sys
@@ -121,3 +122,78 @@ class GeminiClient:
             "unmatched": unmatched,
             "notes": "Mock response (no API key)"
         }
+
+    def transcribe_audio(self, audio_base64: str, mime_type: str = "audio/webm") -> Dict[str, Any]:
+        """
+        Transcribe audio to text using Gemini's multimodal capabilities.
+        Uses gemini-1.5-flash for more stable audio processing.
+        """
+        if not self.model:
+            return {
+                "transcription": "",
+                "error": "No API key - audio transcription requires Gemini API"
+            }
+        
+        try:
+            audio_bytes = base64.b64decode(audio_base64)
+        except Exception as e:
+            return {
+                "transcription": "",
+                "error": f"Failed to decode audio: {str(e)}"
+            }
+        
+        # Use 2.0 flash (same as main model) but with safety overrides
+        stt_model = self.model or genai.GenerativeModel('gemini-2.0-flash')
+        
+        prompt = """
+        You are a highly accurate transcription assistant.
+        Listen to the provided audio carefully and transcribe it exactly into English text.
+        Do not include any interpretations, just the spoken words.
+        
+        If no speech is detected, return an empty string for transcription.
+        
+        Output format: JSON
+        {
+          "transcription": "The spoken text"
+        }
+        """
+        
+        # Disable safety filters for transcription to avoid false refusals
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
+        try:
+            response = stt_model.generate_content(
+                [
+                    prompt,
+                    {
+                        "mime_type": mime_type,
+                        "data": audio_bytes
+                    }
+                ],
+                generation_config={"response_mime_type": "application/json"},
+                safety_settings=safety_settings
+            )
+            
+            text_resp = response.text
+            print(f"Gemini Transcription Response: {text_resp}")
+            
+            data = json.loads(text_resp)
+            return data
+            
+        except Exception as e:
+            print(f"Gemini Audio Error: {e}")
+            # If JSON generation fails or refusal occurs, try to extract text from raw response
+            try:
+                if hasattr(response, 'text'):
+                    return {"transcription": response.text.strip()}
+            except:
+                pass
+            return {
+                "transcription": "",
+                "error": str(e)
+            }
