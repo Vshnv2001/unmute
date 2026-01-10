@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
+import asyncio
 
 from backend.vocab import vocab
 from backend.gemini_client import GeminiClient
@@ -55,7 +56,6 @@ def health():
     return {
         "status": "ok", 
         "vocab_size": len(vocab.get_allowed_tokens()),
-        "gemini_model": gemini.model.model_name if gemini.model else "Mock Mode"
     }
 
 @app.post("/api/translate", response_model=TranslateResponse)
@@ -80,28 +80,54 @@ def translate(req: GlossRequest):
 class TranscribeRequest(BaseModel):
     audio_data: str  # Base64 encoded audio
     mime_type: str = "audio/webm"
+    auto_translate: bool = False  # If True, automatically translate transcription to sign language
 
 
 class TranscribeResponse(BaseModel):
     transcription: str
 
 
-@app.post("/api/transcribe", response_model=TranscribeResponse)
-def transcribe_audio(req: TranscribeRequest):
+@app.post("/api/transcribe")
+async def transcribe_audio(req: TranscribeRequest):
     """
-    Transcribe audio to text using Gemini.
+    Transcribe audio to text using Gemini Live API with automatic VAD.
+    If auto_translate is True, automatically translates the transcription to sign language.
     """
-    print(f"Received transcription request (audio mime_type: {req.mime_type})")
+    print(f"Received transcription request (audio mime_type: {req.mime_type}, auto_translate: {req.auto_translate})")
     
-    # Transcribe audio using Gemini
-    result = gemini.transcribe_audio(req.audio_data, req.mime_type)
+    # Transcribe audio using Live API with VAD
+    result = await gemini.transcribe_audio_live(req.audio_data, req.mime_type)
     
     if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+        # Fallback to old method if Live API fails
+        print(f"Live API failed, falling back to standard transcription: {result['error']}")
+        result = gemini.transcribe_audio(req.audio_data, req.mime_type)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
     
     transcription = result.get("transcription", "")
     print(f"Transcription: {transcription}")
     
+    # If auto_translate is enabled, automatically translate
+    if req.auto_translate and transcription:
+        print(f"Auto-translating: {transcription}")
+        gloss_result = gemini.text_to_gloss(transcription)
+        gloss_tokens = gloss_result.get("gloss", [])
+        unmatched = gloss_result.get("unmatched", [])
+        
+        # Build render plan
+        plan = build_render_plan(gloss_tokens)
+        
+        # Return full translation response
+        return {
+            "transcription": transcription,
+            "gloss": gloss_tokens,
+            "unmatched": unmatched,
+            "plan": plan,
+            "notes": gloss_result.get("notes")
+        }
+    
+    # Return just transcription
     return {"transcription": transcription}
 
 

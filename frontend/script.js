@@ -120,7 +120,7 @@ async function startRecording() {
             // Stop all tracks
             stream.getTracks().forEach(track => track.stop());
 
-            // Process the audio (transcription only)
+            // Process the audio (transcription and auto-translation)
             await transcribeAudio();
         };
 
@@ -149,26 +149,30 @@ function stopRecording() {
         micBtn.classList.remove('recording');
         micIcon.classList.remove('hidden');
         stopIcon.classList.add('hidden');
-        micStatus.textContent = 'Processing...';
+        micStatus.textContent = 'Processing audio...';
         audioWave.classList.add('hidden');
     }
 }
 
 async function transcribeAudio() {
     try {
+        // Update status to show processing
+        micStatus.textContent = 'Transcribing & Translating...';
+
         // Create audio blob
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
 
         // Convert to base64
         const base64Audio = await blobToBase64(audioBlob);
 
-        // Send to backend for transcription only
+        // Send to backend with auto_translate enabled
         const res = await fetch(TRANSCRIBE_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 audio_data: base64Audio,
-                mime_type: 'audio/webm'
+                mime_type: 'audio/webm',
+                auto_translate: true  // Always enable auto-translate
             })
         });
 
@@ -182,18 +186,31 @@ async function transcribeAudio() {
         // Hide processing status
         micStatus.textContent = 'Click to start recording';
 
-        // Show transcription for review
-        if (data.transcription) {
+        // Check if response contains full translation data
+        if (data.plan && Array.isArray(data.plan) && data.gloss && Array.isArray(data.gloss)) {
+            // Full translation received - skip review, show results directly
+            transcriptionReviewSection.classList.add('hidden');
+            outputSection.classList.remove('hidden');
+            renderResult(data);
+        } else if (data.transcription && data.transcription.trim()) {
+            // Transcription only - show review step (fallback case)
+            // This happens if auto-translate failed but transcription succeeded
             transcriptionInput.value = data.transcription;
             transcriptionReviewSection.classList.remove('hidden');
+            outputSection.classList.add('hidden');
         } else {
+            // No transcription received or empty transcription
             alert('No speech detected. Please try again.');
+            transcriptionReviewSection.classList.add('hidden');
+            outputSection.classList.add('hidden');
         }
 
     } catch (error) {
         console.error('Error transcribing audio:', error);
         alert('Error transcribing audio: ' + error.message);
         micStatus.textContent = 'Click to start recording';
+        transcriptionReviewSection.classList.add('hidden');
+        outputSection.classList.add('hidden');
     }
 }
 
@@ -217,6 +234,9 @@ confirmTranscriptionBtn.addEventListener('click', async () => {
         if (!res.ok) throw new Error("Translation failed");
 
         const data = await res.json();
+        
+        // Hide transcription review section after successful translation
+        transcriptionReviewSection.classList.add('hidden');
         renderResult(data);
 
     } catch (e) {
@@ -275,25 +295,38 @@ function setLoading(loading) {
 
 function renderResult(data) {
     outputSection.classList.remove('hidden');
-    currentPlan = data.plan;
+    
+    // Safely extract data with defaults
+    currentPlan = data.plan || [];
+    const gloss = data.gloss || [];
+    const unmatched = data.unmatched || [];
+    const notes = data.notes || "";
 
     // Render Gloss
     glossDisplay.innerHTML = "";
-    data.gloss.forEach(token => {
-        const badge = document.createElement('span');
-        badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
-        badge.textContent = token;
-        glossDisplay.appendChild(badge);
-    });
+    if (gloss.length > 0) {
+        gloss.forEach(token => {
+            const badge = document.createElement('span');
+            badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
+            badge.textContent = token;
+            glossDisplay.appendChild(badge);
+        });
+    } else {
+        glossDisplay.innerHTML = '<span class="text-slate-500 italic">No gloss tokens found</span>';
+    }
 
     // Notes
-    let notes = "";
-    if (data.unmatched.length > 0) notes += `Unmatched: ${data.unmatched.join(", ")}. `;
-    if (data.notes) notes += data.notes;
-    statusNotes.textContent = notes;
+    let notesText = "";
+    if (unmatched.length > 0) notesText += `Unmatched: ${unmatched.join(", ")}. `;
+    if (notes) notesText += notes;
+    statusNotes.textContent = notesText || "";
 
-    // Start Playback
-    playSequence(currentPlan);
+    // Start Playback if plan exists
+    if (currentPlan.length > 0) {
+        playSequence(currentPlan);
+    } else {
+        statusNotes.textContent = (statusNotes.textContent || "") + " No signs to display.";
+    }
 }
 
 async function playSequence(plan) {

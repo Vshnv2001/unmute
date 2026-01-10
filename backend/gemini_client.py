@@ -1,9 +1,13 @@
 import os
 import json
 import base64
-import google.generativeai as genai
-from typing import List, Dict, Any
+from google import genai as genai_live
+from google.genai import types
+from typing import List, Dict, Any, Optional
 import sys
+import asyncio
+import io
+from pydub import AudioSegment
 
 # Ensure backend can be imported if running as script
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,22 +24,32 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 class GeminiClient:
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        self.model = None
+        self.model = None  # Keep for backward compatibility/health check
+        # Initialize client with v1alpha API version for Live API support
         if self.api_key:
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.client = genai_live.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(api_version="v1alpha")
+            )
         else:
             print("Warning: GEMINI_API_KEY not set. Using mock mode.")
+            self.client = None
+    
+    @property
+    def live_client(self):
+        """Backward compatibility: live_client is the same as client"""
+        return self.client
 
     def text_to_gloss(self, text: str, allowed_tokens: List[str] = None) -> Dict[str, Any]:
         """
         Translate text to gloss using permitted tokens.
         If allowed_tokens is None, fetches all from vocab.
+        Uses google.genai Client API (new API).
         """
         if allowed_tokens is None:
             allowed_tokens = vocab.get_allowed_tokens(text)
 
-        if not self.model:
+        if not self.client:
             return self._mock_response(text, allowed_tokens)
 
         # Construct prompt
@@ -64,13 +78,31 @@ class GeminiClient:
         """
         
         try:
-            response = self.model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+            # Use new google.genai Client API
+            # Using gemini-3-flash-preview for better performance, but can use gemini-2.0-flash if preferred
+            response = self.client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(thinking_level="low")  # Use low for faster response
+                )
+            )
+            
+            # Extract text from response
+            # The new google.genai API returns response.text directly
             text_resp = response.text
+            
+            if not text_resp or not text_resp.strip():
+                raise ValueError("Empty response from Gemini API")
+            
             # Parse JSON
             data = json.loads(text_resp)
             return self.validate_gloss(data)
         except Exception as e:
             print(f"Gemini Error: {e}")
+            import traceback
+            traceback.print_exc()
             return {"gloss": [], "unmatched": [], "error": str(e)}
 
     def validate_gloss(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -123,12 +155,51 @@ class GeminiClient:
             "notes": "Mock response (no API key)"
         }
 
+    def _convert_audio_to_pcm(self, audio_bytes: bytes, mime_type: str) -> bytes:
+        """
+        Convert audio bytes to PCM format (16-bit, little-endian, 16kHz).
+        Supports WebM, WAV, and other formats via pydub.
+        """
+        try:
+            # Extract format from mime_type (e.g., "audio/webm" -> "webm")
+            format_str = mime_type.split(';')[0].split('/')[-1]
+            if format_str not in ['webm', 'wav', 'mp3', 'ogg', 'm4a', 'flac']:
+                # Try to detect format or default to webm
+                format_str = 'webm'
+            
+            # Create AudioSegment from bytes
+            audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format=format_str)
+            
+            # Convert to PCM: 16-bit, mono, 16kHz
+            audio = audio.set_frame_rate(16000)
+            audio = audio.set_channels(1)
+            audio = audio.set_sample_width(2)  # 16-bit = 2 bytes
+            
+            # Export as raw PCM (little-endian)
+            pcm_bytes = audio.raw_data
+            return pcm_bytes
+            
+        except Exception as e:
+            print(f"Error converting audio to PCM: {e}")
+            raise  # Re-raise to allow fallback handling
+
+    async def transcribe_audio_live(self, audio_base64: str, mime_type: str = "audio/webm") -> Dict[str, Any]:
+        """
+        Transcribe audio using standard Gemini API.
+        This method uses the standard generate_content API for reliable transcription.
+        Maintains async interface for compatibility with endpoint.
+        """
+        # Use the working standard transcription method
+        # Run it in a thread pool to maintain async interface
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.transcribe_audio, audio_base64, mime_type)
+
     def transcribe_audio(self, audio_base64: str, mime_type: str = "audio/webm") -> Dict[str, Any]:
         """
         Transcribe audio to text using Gemini's multimodal capabilities.
-        Uses gemini-1.5-flash for more stable audio processing.
+        Uses google.genai Client API with gemini-3-flash-preview.
         """
-        if not self.model:
+        if not self.client:
             return {
                 "transcription": "",
                 "error": "No API key - audio transcription requires Gemini API"
@@ -141,9 +212,6 @@ class GeminiClient:
                 "transcription": "",
                 "error": f"Failed to decode audio: {str(e)}"
             }
-        
-        # Use 2.0 flash (same as main model) but with safety overrides
-        stt_model = self.model or genai.GenerativeModel('gemini-2.0-flash')
         
         prompt = """
         You are a highly accurate transcription assistant.
@@ -158,25 +226,28 @@ class GeminiClient:
         }
         """
         
-        # Disable safety filters for transcription to avoid false refusals
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-        
         try:
-            response = stt_model.generate_content(
-                [
-                    prompt,
-                    {
-                        "mime_type": mime_type,
-                        "data": audio_bytes
-                    }
+            # Use new google.genai Client API for transcription
+            response = self.client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(text=prompt),
+                            types.Part(
+                                inline_data=types.Blob(
+                                    mime_type=mime_type,
+                                    data=audio_bytes
+                                )
+                            )
+                        ]
+                    )
                 ],
-                generation_config={"response_mime_type": "application/json"},
-                safety_settings=safety_settings
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(thinking_level="low")
+                )
             )
             
             text_resp = response.text
@@ -187,9 +258,11 @@ class GeminiClient:
             
         except Exception as e:
             print(f"Gemini Audio Error: {e}")
+            import traceback
+            traceback.print_exc()
             # If JSON generation fails or refusal occurs, try to extract text from raw response
             try:
-                if hasattr(response, 'text'):
+                if hasattr(response, 'text') and response.text:
                     return {"transcription": response.text.strip()}
             except:
                 pass
