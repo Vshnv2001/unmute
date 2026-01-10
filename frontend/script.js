@@ -8,6 +8,7 @@ const TRANSCRIBE_API_URL = "http://127.0.0.1:8000/api/transcribe";
 const inputText = document.getElementById('inputText');
 const translateBtn = document.getElementById('translateBtn');
 const outputSection = document.getElementById('outputSection');
+const outputSectionRight = document.getElementById('outputSectionRight');
 const glossDisplay = document.getElementById('glossDisplay');
 const statusNotes = document.getElementById('statusNotes');
 const replayBtn = document.getElementById('replayBtn');
@@ -101,6 +102,7 @@ async function startRecording() {
         // Reset UI
         transcriptionReviewSection.classList.add('hidden');
         outputSection.classList.add('hidden');
+        if (outputSectionRight) outputSectionRight.classList.add('hidden');
 
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: {
@@ -198,6 +200,7 @@ async function transcribeAudio() {
             // Full translation received - skip review, show results directly
             transcriptionReviewSection.classList.add('hidden');
             outputSection.classList.remove('hidden');
+            if (outputSectionRight) outputSectionRight.classList.remove('hidden');
             renderResult(data);
         } else if (data.transcription && data.transcription.trim()) {
             // Transcription only - show review step (fallback case)
@@ -205,11 +208,13 @@ async function transcribeAudio() {
             transcriptionInput.value = data.transcription;
             transcriptionReviewSection.classList.remove('hidden');
             outputSection.classList.add('hidden');
+            if (outputSectionRight) outputSectionRight.classList.add('hidden');
         } else {
             // No transcription received or empty transcription
             alert('No speech detected. Please try again.');
             transcriptionReviewSection.classList.add('hidden');
             outputSection.classList.add('hidden');
+            if (outputSectionRight) outputSectionRight.classList.add('hidden');
         }
 
     } catch (error) {
@@ -218,6 +223,7 @@ async function transcribeAudio() {
         micStatus.textContent = 'Click to start recording';
         transcriptionReviewSection.classList.add('hidden');
         outputSection.classList.add('hidden');
+        if (outputSectionRight) outputSectionRight.classList.add('hidden');
     }
 }
 
@@ -258,6 +264,7 @@ retryRecordingBtn.addEventListener('click', () => {
     transcriptionReviewSection.classList.add('hidden');
     transcriptionInput.value = '';
     outputSection.classList.add('hidden');
+    if (outputSectionRight) outputSectionRight.classList.add('hidden');
 });
 
 function setConfirmLoading(loading) {
@@ -302,6 +309,7 @@ function setLoading(loading) {
 
 function renderResult(data) {
     outputSection.classList.remove('hidden');
+    if (outputSectionRight) outputSectionRight.classList.remove('hidden');
     
     // Resize avatar canvas now that container is visible
     avatar.resize();
