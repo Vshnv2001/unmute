@@ -39,6 +39,7 @@ const retryRecordingBtn = document.getElementById('retryRecordingBtn');
 let currentPlan = [];
 let isPlaying = false;
 let currentGifCancel = null; // Function to cancel current GIF playback
+let currentPlaybackId = 0; // Increment on each new request to cancel ongoing loops
 
 // Audio recording state
 let mediaRecorder = null;
@@ -341,9 +342,130 @@ function renderResult(data) {
 
     // Start Playback with 3D Avatar if plan exists
     if (currentPlan.length > 0) {
+        // Increment playback ID to cancel any ongoing loops from previous requests
+        currentPlaybackId++;
         playSequence(currentPlan);
     } else {
         statusNotes.textContent = (statusNotes.textContent || "") + " No signs to display.";
+    }
+}
+
+// Play a single sign (GIF + MediaPipe skeleton)
+async function playSingleSign(item, playbackId) {
+    // Check if playback was cancelled
+    if (playbackId !== currentPlaybackId) {
+        return false;
+    }
+
+    if (!item.sign_name) {
+        return false;
+    }
+
+    console.log(`Playing sign: ${item.sign_name}`);
+
+    // Show GIF - add timestamp to force reload
+    if (item.assets && item.assets.gif) {
+        const gifUrl = `http://127.0.0.1:8000${item.assets.gif}?t=${Date.now()}`;
+        signPlayer.src = gifUrl;
+        signPlayer.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        playerLabel.textContent = item.token;
+        playerLabel.classList.remove('hidden');
+    }
+
+    try {
+        const resp = await fetch(`${LANDMARKS_URL}/${item.sign_name}/landmarks`);
+        if (resp.ok) {
+            const data = await resp.json();
+            
+            // Prefer pose_frames if available, fallback to hand_frames
+            let frames = null;
+            if (data.pose_frames && Array.isArray(data.pose_frames) && data.pose_frames.length > 0) {
+                frames = data.pose_frames;
+                console.log(`Playing pose skeleton: ${item.token} (${frames.length} frames)`);
+            } else if (data.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
+                frames = data.hand_frames;
+                console.log(`Playing hand skeleton: ${item.token} (${frames.length} frames)`);
+            } else if (data.frames && Array.isArray(data.frames) && data.frames.length > 0) {
+                // Fallback to old format if new format not available
+                frames = data.frames;
+                console.log(`Playing skeleton (legacy format): ${item.token} (${frames.length} frames)`);
+            }
+            
+            if (!frames) {
+                console.warn(`No frame data available for ${item.sign_name}`);
+                await new Promise(r => setTimeout(r, 2000));
+                signPlayer.classList.add('hidden');
+                signPlayer.src = '';
+                return false;
+            }
+
+            console.log(`Playing: ${item.token} (${frames.length} total frames)`);
+
+            // Create a cancellable GIF promise
+            let gifCancel = null;
+            const gifPromise = new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    resolve(false); // GIF completed normally
+                }, 4000); // 4s for GIF
+                
+                gifCancel = () => {
+                    clearTimeout(timeout);
+                    resolve(true); // GIF was cancelled
+                };
+            });
+            
+            // Store cancel function so it can be called if skeleton goes blank
+            currentGifCancel = gifCancel;
+
+            // Play skeleton and check if it has valid frames
+            let hasValidSkeleton = false;
+            try {
+                const skeletonPromise = avatar.playSequence(frames, 10);  // 10fps skeleton
+                hasValidSkeleton = await skeletonPromise;
+            } catch (e) {
+                console.error(`Error playing skeleton for ${item.token}:`, e);
+                hasValidSkeleton = false; // Treat errors as blank
+            }
+
+            // If skeleton went blank or errored, cancel the GIF immediately
+            if (!hasValidSkeleton) {
+                console.log(`Skeleton went blank or errored for ${item.token}, stopping GIF`);
+                if (gifCancel) {
+                    gifCancel();
+                }
+                // Stop the GIF immediately
+                signPlayer.classList.add('hidden');
+                signPlayer.src = '';
+                // Clear the cancel function
+                currentGifCancel = null;
+                return false;
+            }
+
+            // Wait for GIF to complete (or be cancelled)
+            const gifWasCancelled = await gifPromise;
+            
+            // Clear the cancel function
+            currentGifCancel = null;
+
+            if (!gifWasCancelled) {
+                console.log(`Finished: ${item.token}`);
+            }
+
+            // Hide GIF after both complete
+            signPlayer.classList.add('hidden');
+            signPlayer.src = '';
+            return true;
+        } else {
+            console.warn(`No 3D data for ${item.sign_name}`);
+            await new Promise(r => setTimeout(r, 4000));
+            signPlayer.classList.add('hidden');
+            signPlayer.src = '';
+            return false;
+        }
+    } catch (e) {
+        console.error("Fetch error", e);
+        return false;
     }
 }
 
@@ -375,123 +497,51 @@ async function playSequence(plan) {
 
     console.log('Unique plan:', uniquePlan.map(p => p.sign_name || p.token));
 
-    for (let i = 0; i < uniquePlan.length; i++) {
-        const item = uniquePlan[i];
+    // Detect single sign vs multiple signs
+    const signs = uniquePlan.filter(item => item.type === 'sign' && item.sign_name);
+    const isSingleSign = signs.length === 1;
 
-        if (item.type === 'sign' && item.sign_name) {
-            console.log(`Starting sign ${i + 1}/${uniquePlan.length}: ${item.sign_name}`);
-
-            // Show GIF - add timestamp to force reload
-            if (item.assets && item.assets.gif) {
-                const gifUrl = `http://127.0.0.1:8000${item.assets.gif}?t=${Date.now()}`;
-                signPlayer.src = gifUrl;
-                signPlayer.classList.remove('hidden');
-                placeholder.classList.add('hidden');
-                playerLabel.textContent = item.token;
-                playerLabel.classList.remove('hidden');
+    if (isSingleSign) {
+        // Single sign mode: loop until a new request is sent
+        const playbackId = currentPlaybackId;
+        const singleSign = signs[0];
+        
+        console.log(`Single sign detected: ${singleSign.sign_name}, starting loop`);
+        
+        while (playbackId === currentPlaybackId) {
+            // Check if cancelled before each iteration
+            if (playbackId !== currentPlaybackId) {
+                break;
             }
-
-            try {
-                const resp = await fetch(`${LANDMARKS_URL}/${item.sign_name}/landmarks`);
-                if (resp.ok) {
-                    const data = await resp.json();
-                    
-                    // Prefer pose_frames if available, fallback to hand_frames
-                    let frames = null;
-                    if (data.pose_frames && Array.isArray(data.pose_frames) && data.pose_frames.length > 0) {
-                        frames = data.pose_frames;
-                        console.log(`Playing pose skeleton: ${item.token} (${frames.length} frames)`);
-                    } else if (data.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
-                        frames = data.hand_frames;
-                        console.log(`Playing hand skeleton: ${item.token} (${frames.length} frames)`);
-                    } else if (data.frames && Array.isArray(data.frames) && data.frames.length > 0) {
-                        // Fallback to old format if new format not available
-                        frames = data.frames;
-                        console.log(`Playing skeleton (legacy format): ${item.token} (${frames.length} frames)`);
-                    }
-                    
-                    if (!frames) {
-                        console.warn(`No frame data available for ${item.sign_name}`);
-                        await new Promise(r => setTimeout(r, 2000));
-                        signPlayer.classList.add('hidden');
-                        signPlayer.src = '';
-                        continue;
-                    }
-
-                    console.log(`Playing: ${item.token} (${frames.length} total frames)`);
-
-                    // Create a cancellable GIF promise
-                    let gifCancel = null;
-                    const gifPromise = new Promise((resolve) => {
-                        const timeout = setTimeout(() => {
-                            resolve(false); // GIF completed normally
-                        }, 4000); // 4s for GIF
-                        
-                        gifCancel = () => {
-                            clearTimeout(timeout);
-                            resolve(true); // GIF was cancelled
-                        };
-                    });
-                    
-                    // Store cancel function so it can be called if skeleton goes blank
-                    currentGifCancel = gifCancel;
-
-                    // Play skeleton and check if it has valid frames
-                    let hasValidSkeleton = false;
-                    try {
-                        const skeletonPromise = avatar.playSequence(frames, 10);  // 10fps skeleton
-                        hasValidSkeleton = await skeletonPromise;
-                    } catch (e) {
-                        console.error(`Error playing skeleton for ${item.token}:`, e);
-                        hasValidSkeleton = false; // Treat errors as blank
-                    }
-
-                    // If skeleton went blank or errored, cancel the GIF immediately
-                    if (!hasValidSkeleton) {
-                        console.log(`Skeleton went blank or errored for ${item.token}, stopping GIF`);
-                        if (gifCancel) {
-                            gifCancel();
-                        }
-                        // Stop the GIF immediately
-                        signPlayer.classList.add('hidden');
-                        signPlayer.src = '';
-                        // Clear the cancel function
-                        currentGifCancel = null;
-                        // Continue to next sign
-                        continue;
-                    }
-
-                    // Wait for GIF to complete (or be cancelled)
-                    const gifWasCancelled = await gifPromise;
-                    
-                    // Clear the cancel function
-                    currentGifCancel = null;
-
-                    if (!gifWasCancelled) {
-                        console.log(`Finished: ${item.token}`);
-                    }
-
-                    // Hide GIF after both complete
-                    signPlayer.classList.add('hidden');
-                    signPlayer.src = '';
-                } else {
-                    console.warn(`No 3D data for ${item.sign_name}`);
-                    await new Promise(r => setTimeout(r, 4000));
-                    signPlayer.classList.add('hidden');
-                    signPlayer.src = '';
-                }
-            } catch (e) {
-                console.error("Fetch error", e);
-            }
-
-            // Brief pause between words
-            if (i < uniquePlan.length - 1) {
+            
+            await playSingleSign(singleSign, playbackId);
+            
+            // Brief pause between loops (only if still same playback session)
+            if (playbackId === currentPlaybackId) {
                 await new Promise(r => setTimeout(r, 300));
             }
+        }
+        
+        console.log('Single sign loop ended (new request received)');
+    } else {
+        // Multiple signs mode: sequential playback (existing behavior)
+        for (let i = 0; i < uniquePlan.length; i++) {
+            const item = uniquePlan[i];
 
-        } else {
-            console.log(`Skipping non-sign: ${item.token}`);
-            await new Promise(r => setTimeout(r, 500));
+            if (item.type === 'sign' && item.sign_name) {
+                console.log(`Starting sign ${i + 1}/${uniquePlan.length}: ${item.sign_name}`);
+                
+                await playSingleSign(item, currentPlaybackId);
+
+                // Brief pause between words
+                if (i < uniquePlan.length - 1) {
+                    await new Promise(r => setTimeout(r, 300));
+                }
+
+            } else {
+                console.log(`Skipping non-sign: ${item.token}`);
+                await new Promise(r => setTimeout(r, 500));
+            }
         }
     }
 
