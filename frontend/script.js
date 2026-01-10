@@ -1,332 +1,366 @@
-const API_URL = "http://127.0.0.1:8000/api/translate";
-const TRANSCRIBE_API_URL = "http://127.0.0.1:8000/api/transcribe";
+const API_URL = "/api/translate";
+const TRANSCRIBE_URL = "/api/transcribe";
 
 // DOM Elements
-const inputText = document.getElementById('inputText');
-const translateBtn = document.getElementById('translateBtn');
-const outputSection = document.getElementById('outputSection');
-const glossDisplay = document.getElementById('glossDisplay');
-const signPlayer = document.getElementById('signPlayer');
-const placeholder = document.getElementById('placeholder');
-const statusNotes = document.getElementById('statusNotes');
-const playerLabel = document.getElementById('playerLabel');
-const replayBtn = document.getElementById('replayBtn');
+const authSection = document.getElementById('authSection');
+const lobbySection = document.getElementById('lobbySection');
+const meetingSection = document.getElementById('meetingSection');
 
-// Voice mode elements
-const textModeTab = document.getElementById('textModeTab');
-const voiceModeTab = document.getElementById('voiceModeTab');
-const textInputSection = document.getElementById('textInputSection');
-const voiceInputSection = document.getElementById('voiceInputSection');
-const micBtn = document.getElementById('micBtn');
-const micIcon = document.getElementById('micIcon');
-const stopIcon = document.getElementById('stopIcon');
-const micStatus = document.getElementById('micStatus');
-const audioWave = document.getElementById('audioWave');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+const showSignup = document.getElementById('showSignup');
+const showLogin = document.getElementById('showLogin');
 
-// Transcription review elements
-const transcriptionReviewSection = document.getElementById('transcriptionReviewSection');
-const transcriptionInput = document.getElementById('transcriptionInput');
-const confirmTranscriptionBtn = document.getElementById('confirmTranscriptionBtn');
-const retryRecordingBtn = document.getElementById('retryRecordingBtn');
+const userGreeting = document.getElementById('userGreeting');
+const displayRoomId = document.getElementById('displayRoomId');
+const videoGrid = document.getElementById('videoGrid');
+const localVideo = document.getElementById('localVideo');
+const transcriptionText = document.getElementById('transcriptionText');
+const speakerName = document.getElementById('speakerName');
 
-let currentPlan = [];
-let isPlaying = false;
+// Meeting State
+let currentUser = null;
+let currentToken = localStorage.getItem('token');
+let currentRoomId = null;
+let localStream = null;
+let myPeer = null;
+let peers = {};
+let socket = null;
+let transcriptionInterval = null;
 
-// Audio recording state
-let mediaRecorder = null;
-let audioChunks = [];
-let isRecording = false;
+// --- Authentication UI Logic ---
 
-// Mode switching
-textModeTab.addEventListener('click', () => {
-    textModeTab.classList.add('active');
-    textModeTab.classList.remove('text-slate-400');
-    voiceModeTab.classList.remove('active');
-    voiceModeTab.classList.add('text-slate-400');
-    textInputSection.classList.remove('hidden');
-    voiceInputSection.classList.add('hidden');
-});
+showSignup.onclick = () => { loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); };
+showLogin.onclick = () => { signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); };
 
-voiceModeTab.addEventListener('click', () => {
-    voiceModeTab.classList.add('active');
-    voiceModeTab.classList.remove('text-slate-400');
-    textModeTab.classList.remove('active');
-    textModeTab.classList.add('text-slate-400');
-    voiceInputSection.classList.remove('hidden');
-    textInputSection.classList.add('hidden');
-});
-
-// Text translation
-translateBtn.addEventListener('click', async () => {
-    const text = inputText.value.trim();
-    if (!text) return;
-
-    setLoading(true);
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
-        });
-
-        if (!res.ok) throw new Error("API Error");
-
-        const data = await res.json();
-        renderResult(data);
-    } catch (e) {
-        alert("Translation Failed: " + e.message);
-    } finally {
-        setLoading(false);
-    }
-});
-
-// Voice recording
-micBtn.addEventListener('click', async () => {
-    if (!isRecording) {
-        await startRecording();
+document.getElementById('signupBtn').onclick = async () => {
+    const username = document.getElementById('signupUsername').value;
+    const password = document.getElementById('signupPassword').value;
+    const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    if (res.ok) {
+        alert("Signup successful! Please login.");
+        showLogin.onclick();
     } else {
-        stopRecording();
-    }
-});
-
-async function startRecording() {
-    try {
-        // Reset UI
-        transcriptionReviewSection.classList.add('hidden');
-        outputSection.classList.add('hidden');
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                sampleRate: 16000,
-                channelCount: 1,
-                echoCancellation: true,
-                noiseSuppression: true
-            }
-        });
-
-        mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm;codecs=opus'
-        });
-
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                audioChunks.push(event.data);
-            }
-        };
-
-        mediaRecorder.onstop = async () => {
-            // Stop all tracks
-            stream.getTracks().forEach(track => track.stop());
-
-            // Process the audio (transcription only)
-            await transcribeAudio();
-        };
-
-        mediaRecorder.start(100); // Collect data every 100ms
-        isRecording = true;
-
-        // Update UI
-        micBtn.classList.add('recording');
-        micIcon.classList.add('hidden');
-        stopIcon.classList.remove('hidden');
-        micStatus.textContent = 'Recording... Click to stop';
-        audioWave.classList.remove('hidden');
-
-    } catch (error) {
-        console.error('Error accessing microphone:', error);
-        alert('Could not access microphone. Please ensure you have granted permission.');
-    }
-}
-
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        isRecording = false;
-
-        // Update UI
-        micBtn.classList.remove('recording');
-        micIcon.classList.remove('hidden');
-        stopIcon.classList.add('hidden');
-        micStatus.textContent = 'Processing...';
-        audioWave.classList.add('hidden');
-    }
-}
-
-async function transcribeAudio() {
-    try {
-        // Create audio blob
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-
-        // Convert to base64
-        const base64Audio = await blobToBase64(audioBlob);
-
-        // Send to backend for transcription only
-        const res = await fetch(TRANSCRIBE_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                audio_data: base64Audio,
-                mime_type: 'audio/webm'
-            })
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.detail || "Transcription failed");
-        }
-
         const data = await res.json();
-
-        // Hide processing status
-        micStatus.textContent = 'Click to start recording';
-
-        // Show transcription for review
-        if (data.transcription) {
-            transcriptionInput.value = data.transcription;
-            transcriptionReviewSection.classList.remove('hidden');
-        } else {
-            alert('No speech detected. Please try again.');
-        }
-
-    } catch (error) {
-        console.error('Error transcribing audio:', error);
-        alert('Error transcribing audio: ' + error.message);
-        micStatus.textContent = 'Click to start recording';
+        alert(data.detail || "Signup failed");
     }
-}
+};
 
-// Confirm transcription and translate
-confirmTranscriptionBtn.addEventListener('click', async () => {
-    const text = transcriptionInput.value.trim();
-    if (!text) {
-        alert('Please enter some text to translate');
+document.getElementById('loginBtn').onclick = async () => {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    const res = await fetch('/api/token', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (res.ok) {
+        const data = await res.json();
+        currentToken = data.access_token;
+        localStorage.setItem('token', currentToken);
+        initApp();
+    } else {
+        alert("Login failed");
+    }
+};
+
+document.getElementById('logoutBtn').onclick = () => {
+    localStorage.removeItem('token');
+    location.reload();
+};
+
+// --- App Initialization ---
+
+async function initApp() {
+    if (!currentToken) {
+        authSection.classList.remove('hidden');
+        lobbySection.classList.add('hidden');
         return;
     }
 
-    setConfirmLoading(true);
-
     try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
+        const res = await fetch('/api/rooms/join/test', { // Just checking auth
+            headers: { 'Authorization': `Bearer ${currentToken}` }
         });
 
-        if (!res.ok) throw new Error("Translation failed");
+        if (res.status === 401) throw new Error("Unauthorized");
 
+        // Success
         const data = await res.json();
-        renderResult(data);
+        currentUser = data.username;
+        userGreeting.textContent = currentUser;
+
+        authSection.classList.add('hidden');
+        lobbySection.classList.remove('hidden');
 
     } catch (e) {
-        alert("Translation Failed: " + e.message);
-    } finally {
-        setConfirmLoading(false);
+        localStorage.removeItem('token');
+        authSection.classList.remove('hidden');
     }
-});
+}
 
-// Retry recording
-retryRecordingBtn.addEventListener('click', () => {
-    transcriptionReviewSection.classList.add('hidden');
-    transcriptionInput.value = '';
-    outputSection.classList.add('hidden');
-});
+// --- Lobby Logic ---
 
-function setConfirmLoading(loading) {
-    confirmTranscriptionBtn.disabled = loading;
-    confirmTranscriptionBtn.innerHTML = loading
-        ? `<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-           </svg>
-           Translating...`
-        : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-           </svg>
-           Confirm & Translate`;
-    confirmTranscriptionBtn.classList.toggle('opacity-50', loading);
+document.getElementById('createMeetingBtn').onclick = async () => {
+    const res = await fetch('/api/rooms/create', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    if (res.ok) {
+        const data = await res.json();
+        startMeeting(data.room_id);
+    }
+};
+
+document.getElementById('joinBtn').onclick = () => {
+    const roomId = document.getElementById('joinRoomId').value.trim();
+    if (roomId) startMeeting(roomId);
+};
+
+// --- Meeting Logic (WebRTC & SL) ---
+
+async function startMeeting(roomId) {
+    currentRoomId = roomId;
+    displayRoomId.textContent = roomId;
+    lobbySection.classList.add('hidden');
+    meetingSection.classList.remove('hidden');
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        addVideoStream(localVideo, localStream, 'localVideoContainer');
+
+        // Initialize Peer
+        myPeer = new Peer(undefined, {
+            host: '/',
+            port: '8000', // Uvicorn port
+            path: '/peerjs' // We'll need to support this or use default PeerJS cloud
+        });
+
+        // Actually PeerJS server is not built-in, so for local dev without a dedicated PeerServer,
+        // we'll use the default PeerJS cloud servers (remove parameters).
+        myPeer = new Peer();
+
+        myPeer.on('open', id => {
+            console.log("My Peer ID:", id);
+            connectWebSocket(id);
+        });
+
+        myPeer.on('call', call => {
+            call.answer(localStream);
+            const video = document.createElement('video');
+            call.on('stream', userVideoStream => {
+                addVideoStream(video, userVideoStream, call.peer);
+            });
+        });
+
+        // Start SL Intelligence Loop
+        startSLIntelligence();
+
+    } catch (e) {
+        console.error("Failed to start meeting:", e);
+        alert("Camera/Mic access required");
+    }
+}
+
+function connectWebSocket(peerId) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${protocol}//${window.location.host}/ws/meeting/${currentRoomId}`);
+
+    socket.onopen = () => {
+        // Announce myself to the room
+        socket.send(JSON.stringify({
+            type: 'join',
+            peerId: peerId,
+            username: currentUser
+        }));
+    };
+
+    socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'join' && data.peerId !== peerId) {
+            // New user joined, call them
+            setTimeout(() => connectToNewUser(data.peerId, localStream), 1000);
+        }
+
+        if (data.type === 'sl-update') {
+            // Show SL overlay for a specific user
+            showSLOverlay(data.peerId, data.username, data.transcription, data.plan);
+        }
+    };
+}
+
+function connectToNewUser(peerId, stream) {
+    const call = myPeer.call(peerId, stream);
+    const video = document.createElement('video');
+    call.on('stream', userVideoStream => {
+        addVideoStream(video, userVideoStream, peerId);
+    });
+    call.on('close', () => {
+        const container = document.getElementById(peerId);
+        if (container) container.remove();
+    });
+    peers[peerId] = call;
+}
+
+function addVideoStream(video, stream, containerId) {
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.className = 'video-container';
+
+        const label = document.createElement('div');
+        label.className = 'participant-label';
+        label.textContent = containerId === 'localVideoContainer' ? 'You' : 'User';
+
+        const slOverlay = document.createElement('div');
+        slOverlay.className = 'sl-overlay';
+        slOverlay.id = `sl-${containerId}`;
+        const slImg = document.createElement('img');
+        slOverlay.appendChild(slImg);
+
+        container.appendChild(video);
+        container.appendChild(label);
+        container.appendChild(slOverlay);
+        videoGrid.append(container);
+    }
+
+    video.srcObject = stream;
+    video.addEventListener('loadedmetadata', () => {
+        video.play();
+    });
+}
+
+// --- SL Intelligence Logic ---
+
+async function startSLIntelligence() {
+    const mediaRecorder = new MediaRecorder(localStream, { mimeType: 'audio/webm' });
+    let audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+
+    mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        audioChunks = [];
+
+        // 1. Transcribe
+        const base64Audio = await blobToBase64(blob);
+        const transRes = await fetch(TRANSCRIBE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio_data: base64Audio })
+        });
+
+        if (transRes.ok) {
+            const transData = await transRes.json();
+            const text = transData.transcription;
+
+            if (text && text.trim().length > 2) {
+                // 2. Translate
+                const slRes = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+
+                if (slRes.ok) {
+                    const slData = await slRes.json();
+
+                    // 3. Broadcast to Room
+                    socket.send(JSON.stringify({
+                        type: 'sl-update',
+                        peerId: myPeer.id,
+                        username: currentUser,
+                        transcription: text,
+                        plan: slData.plan
+                    }));
+
+                    // Also show locally for feedback
+                    showSLOverlay(myPeer.id, currentUser, text, slData.plan);
+                }
+            }
+        }
+
+        // Continue loop if still in meeting
+        if (currentRoomId) mediaRecorder.start();
+    };
+
+    // Trigger every 4 seconds
+    transcriptionInterval = setInterval(() => {
+        if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+        } else {
+            mediaRecorder.start();
+        }
+    }, 4000);
+}
+
+function showSLOverlay(peerId, name, text, plan) {
+    // 1. Update Transcription Ticker
+    speakerName.textContent = `${name}: `;
+    transcriptionText.textContent = text;
+
+    // 2. Play SL Sequence on the Overlay
+    const containerId = peerId === myPeer.id ? 'localVideoContainer' : peerId;
+    const overlay = document.querySelector(`#sl-${containerId}`);
+    if (!overlay) return;
+
+    const img = overlay.querySelector('img');
+    overlay.style.display = 'block';
+
+    // Play sequence
+    playSLSequence(img, plan, overlay);
+}
+
+async function playSLSequence(imgElem, plan, overlayElem) {
+    for (const item of plan) {
+        if (item.type === 'sign' && item.assets.gif) {
+            imgElem.src = window.location.origin + item.assets.gif;
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+    // Hide overlay after sequence ends (with small delay)
+    setTimeout(() => {
+        overlayElem.style.display = 'none';
+    }, 1000);
 }
 
 function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-            // Remove the data URL prefix (e.g., "data:audio/webm;base64,")
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
 }
 
-replayBtn.addEventListener('click', () => {
-    if (currentPlan.length > 0 && !isPlaying) {
-        playSequence(currentPlan);
-    }
-});
+// --- Controls ---
 
-function setLoading(loading) {
-    translateBtn.disabled = loading;
-    translateBtn.textContent = loading ? "Translating..." : "Translate";
-    translateBtn.classList.toggle('opacity-50', loading);
-}
+document.getElementById('toggleMic').onclick = () => {
+    const audioTrack = localStream.getAudioTracks()[0];
+    audioTrack.enabled = !audioTrack.enabled;
+    document.getElementById('toggleMic').classList.toggle('off', !audioTrack.enabled);
+};
 
-function renderResult(data) {
-    outputSection.classList.remove('hidden');
-    currentPlan = data.plan;
+document.getElementById('toggleCam').onclick = () => {
+    const videoTrack = localStream.getVideoTracks()[0];
+    videoTrack.enabled = !videoTrack.enabled;
+    document.getElementById('toggleCam').classList.toggle('off', !videoTrack.enabled);
+};
 
-    // Render Gloss
-    glossDisplay.innerHTML = "";
-    data.gloss.forEach(token => {
-        const badge = document.createElement('span');
-        badge.className = "bg-teal-500/20 text-teal-300 px-2 py-1 rounded text-sm font-bold border border-teal-500/30";
-        badge.textContent = token;
-        glossDisplay.appendChild(badge);
-    });
+document.getElementById('leaveBtn').onclick = () => {
+    location.reload();
+};
 
-    // Notes
-    let notes = "";
-    if (data.unmatched.length > 0) notes += `Unmatched: ${data.unmatched.join(", ")}. `;
-    if (data.notes) notes += data.notes;
-    statusNotes.textContent = notes;
-
-    // Start Playback
-    playSequence(currentPlan);
-}
-
-async function playSequence(plan) {
-    if (isPlaying) return;
-    isPlaying = true;
-    placeholder.classList.add('hidden');
-    signPlayer.classList.remove('hidden');
-    playerLabel.classList.remove('hidden');
-
-    for (const item of plan) {
-        if (item.type === 'sign' && item.assets.gif) {
-            // Update UI
-            playerLabel.textContent = item.token;
-
-            // Show new GIF
-            // Hack to force reload gif if same src
-            const baseUrl = "http://127.0.0.1:8000" + item.assets.gif;
-            signPlayer.src = baseUrl;
-
-            // Wait duration (2 seconds per sign)
-            await new Promise(r => setTimeout(r, 2000));
-        } else {
-            // Text only fallback
-            playerLabel.textContent = item.token + " (No Asset)";
-            signPlayer.src = ""; // Clear or placeholder
-            await new Promise(r => setTimeout(r, 1500));
-        }
-    }
-
-    // Reset
-    isPlaying = false;
-    playerLabel.textContent = "DONE";
-    setTimeout(() => {
-        playerLabel.classList.add('hidden');
-    }, 1000);
-}
+// Initial Load
+initApp();
