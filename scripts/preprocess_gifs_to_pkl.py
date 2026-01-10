@@ -5,6 +5,8 @@ import pickle
 import argparse
 import numpy as np
 import mediapipe as mp
+from mediapipe.tasks import python as mp_tasks
+from mediapipe.tasks.python import vision as mp_vision
 from PIL import Image
 from datetime import datetime
 
@@ -26,8 +28,15 @@ def find_gif_and_json(sign_dir):
     return gif_path, json_path
 
 def load_gif_frames(gif_path):
-    """Load GIF frames as list of RGB numpy arrays."""
+    """Load GIF frames as list of RGB numpy arrays with timestamps.
+    
+    Returns:
+        frames: List of RGB numpy arrays
+        timestamps_ms: List of timestamps in milliseconds for MediaPipe VIDEO mode
+    """
     frames = []
+    timestamps_ms = []
+    t_ms = 0.0
     try:
         with Image.open(gif_path) as im:
             index = 0
@@ -37,17 +46,28 @@ def load_gif_frames(gif_path):
                     # Convert to RGB (handle palettes/transparency)
                     frame = im.convert('RGB')
                     frames.append(np.array(frame))
+                    # Get frame duration in milliseconds
+                    dur = float(im.info.get("duration", 100.0))  # ms
+                    dur = max(dur, 1.0)
+                    timestamps_ms.append(int(t_ms))
+                    t_ms += dur
                     index += 1
                 except EOFError:
                     break
     except Exception as e:
         print(f"Error loading {gif_path}: {e}")
-        return []
-    return frames
+        return [], []
+    return frames, timestamps_ms
 
-def run_mediapipe_hands(frames, hands_solution):
+def run_mediapipe_hands(frames, timestamps_ms: list[int], model_path: str):
     """
-    Run MediaPipe Hands on a list of frames.
+    Run MediaPipe HandLandmarker on a list of frames using VIDEO mode.
+    
+    Args:
+        frames: List of RGB numpy arrays
+        timestamps_ms: List of timestamps in milliseconds for VIDEO mode
+        model_path: Path to hand_landmarker.task model file
+    
     Returns: (L, 126) numpy array.
              L = number of frames
              126 = 2 hands * 21 landmarks * 3 coords
@@ -55,37 +75,73 @@ def run_mediapipe_hands(frames, hands_solution):
     L = len(frames)
     X_raw = np.zeros((L, 126), dtype=np.float32)
     
-    for i, frame in enumerate(frames):
-        results = hands_solution.process(frame)
-        
-        # We need to map left/right consistently.
-        # MediaPipe 'multi_hand_landmarks' list corresponds to 'multi_handedness'.
-        # We want [Left 21x3, Right 21x3] flattend.
-        
-        # Default zero
-        lh = np.zeros((21, 3), dtype=np.float32)
-        rh = np.zeros((21, 3), dtype=np.float32)
-        
-        if results.multi_hand_landmarks:
-            for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                # Check label
-                label = results.multi_handedness[hand_idx].classification[0].label
-                # MediaPipe: "Left" matches left hand in camera view (which is user's right if mirrored?)
-                # Usually standard input is mirrored. "Left" label -> user's left hand if not mirrored.
-                # We'll trust the label.
-                
-                # Extract coords (x,y,z)
-                coords = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark], dtype=np.float32)
-                
-                if label == "Left":
-                    lh = coords
-                else:
-                    rh = coords
+    # Create HandLandmarker instance for this sequence
+    BaseOptions = mp_tasks.BaseOptions
+    HandLandmarker = mp_vision.HandLandmarker
+    HandLandmarkerOptions = mp_vision.HandLandmarkerOptions
+    VisionRunningMode = mp_vision.RunningMode
+
+    options = HandLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.VIDEO,
+        num_hands=2,
+        min_hand_detection_confidence=0.5,
+        min_hand_presence_confidence=0.5,
+        min_tracking_confidence=0.5,
+    )
+
+    with HandLandmarker.create_from_options(options) as landmarker:
+        for i, (frame, timestamp_ms) in enumerate(zip(frames, timestamps_ms)):
+            # Convert numpy array to MediaPipe Image with explicit dimensions
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+            
+            # Process frame in VIDEO mode with timestamp
+            result = landmarker.detect_for_video(mp_image, timestamp_ms)
+            
+            # We need to map left/right consistently.
+            # MediaPipe hand_landmarks list corresponds to handedness.
+            # We want [Left 21x3, Right 21x3] flattened.
+            
+            # Default zero
+            lh = np.zeros((21, 3), dtype=np.float32)
+            rh = np.zeros((21, 3), dtype=np.float32)
+            
+            if result.hand_landmarks:
+                for hand_idx, hand_landmarks in enumerate(result.hand_landmarks):
+                    # Extract handedness from new API structure
+                    label = None
+                    if hand_idx < len(result.handedness) and result.handedness[hand_idx]:
+                        # New API: handedness[i] is iterable and contains category objects
+                        # Access pattern: result.handedness[i][0].category_name
+                        try:
+                            handedness_cats = result.handedness[hand_idx]
+                            if handedness_cats and len(handedness_cats) > 0:
+                                label = handedness_cats[0].category_name
+                        except (IndexError, AttributeError, TypeError):
+                            # Fallback: iterate if structure is different
+                            for cat in result.handedness[hand_idx]:
+                                if hasattr(cat, 'category_name'):
+                                    label = cat.category_name
+                                    break
                     
-        # Flatten and store: [lh_x, lh_y, lh_z, ... rh_x, rh_y, rh_z ...]
-        # 21*3 = 63. 63*2 = 126.
-        vec = np.concatenate([lh.flatten(), rh.flatten()])
-        X_raw[i] = vec
+                    # Extract coords (x,y,z)
+                    coords = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks], dtype=np.float32)
+                    
+                    if label == "Left":
+                        lh = coords
+                    elif label == "Right":
+                        rh = coords
+                    else:
+                        # If handedness unknown, assign based on position (leftmost = left)
+                        if np.all(lh == 0):
+                            lh = coords
+                        else:
+                            rh = coords
+                        
+            # Flatten and store: [lh_x, lh_y, lh_z, ... rh_x, rh_y, rh_z ...]
+            # 21*3 = 63. 63*2 = 126.
+            vec = np.concatenate([lh.flatten(), rh.flatten()])
+            X_raw[i] = vec
         
     return X_raw
 
@@ -136,7 +192,28 @@ def main():
     parser.add_argument("--dataset", default="sgsl_dataset", help="Path to input dataset")
     parser.add_argument("--output", default="sgsl_processed", help="Path to output directory")
     parser.add_argument("--limit", type=int, default=None, help="Max signs to process (for testing)")
+    parser.add_argument("--model_path", default=None, help="Path to hand_landmarker.task model file")
     args = parser.parse_args()
+    
+    # Set default model path if not provided
+    model_path = args.model_path
+    if model_path is None:
+        # Try common locations
+        possible_paths = [
+            "./mediapipe_experiments/hand_landmarker.task",
+            "./mediapipe/hand_landmarker.task",
+            "mediapipe_experiments/hand_landmarker.task",
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                model_path = path
+                break
+    
+    if model_path is None or not os.path.exists(model_path):
+        raise FileNotFoundError(
+            "Hand landmarker model file not found. Please specify --model_path "
+            "or ensure hand_landmarker.task exists in mediapipe_experiments/ or mediapipe/"
+        )
     
     # Setup Output
     os.makedirs(os.path.join(args.output, "landmarks_pkl"), exist_ok=True)
@@ -182,13 +259,7 @@ def main():
 
     # Pass 2: Process
     print("Pass 2: Processing...")
-    
-    mp_hands = mp.solutions.hands.Hands(
-        static_image_mode=False,
-        max_num_hands=2,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
+    print(f"Using model: {model_path}")
     
     processed_count = 0
     
@@ -212,12 +283,12 @@ def main():
                 pass
                 
         # Load Frames
-        frames = load_gif_frames(gif_path)
+        frames, timestamps_ms = load_gif_frames(gif_path)
         if not frames:
             continue
             
         # Run MediaPipe
-        X_raw = run_mediapipe_hands(frames, mp_hands)
+        X_raw = run_mediapipe_hands(frames, timestamps_ms, model_path)
         
         # Normalize
         X_norm = normalize_sequence(X_raw)
@@ -248,8 +319,6 @@ def main():
         
         if processed_count % 10 == 0:
             print(f"Processed {processed_count} signs...")
-            
-    mp_hands.close()
     
     # Save Global Meta
     with open(os.path.join(args.output, "meta.json"), 'w') as f:

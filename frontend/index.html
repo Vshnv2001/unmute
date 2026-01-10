@@ -60,12 +60,92 @@
                 </div>
             </div>
 
+            <!-- Pose Visualization -->
+            <div class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative">
+                <canvas id="poseCanvas" class="w-full h-full"></canvas>
+                <div id="poseLabel" class="absolute top-4 right-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-purple-400 hidden">
+                    POSE VIEW
+                </div>
+            </div>
+
             <!-- Notes/Status -->
             <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
 
         </div>
     </div>
 
+    <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700 mt-8">
+        <h1 class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+            Sign to Text
+        </h1>
+        <p class="text-slate-400 text-center mb-8">Upload a video to translate</p>
+
+        <!-- Input Section -->
+        <div class="space-y-4">
+            <!-- Tabs or toggle could go here, but stacking is fine for MVP -->
+            
+            <div class="p-4 bg-slate-900 rounded-xl border border-slate-700">
+                <h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Option 1: Upload Video</h3>
+                <input type="file" id="videoInput" accept="video/*" 
+                    class="block w-full text-sm text-slate-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-purple-50 file:text-purple-700
+                    hover:file:bg-purple-100
+                    cursor-pointer bg-slate-800 border border-slate-600 rounded-lg p-2 mb-2">
+                
+                <button id="signTranslateBtn" 
+                    class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg transition-all">
+                    Translate Upload
+                </button>
+            </div>
+
+            <div class="relative flex py-2 items-center">
+                <div class="flex-grow border-t border-slate-700"></div>
+                <span class="flex-shrink-0 mx-4 text-slate-500 text-xs uppercase">OR</span>
+                <div class="flex-grow border-t border-slate-700"></div>
+            </div>
+
+            <div class="p-4 bg-slate-900 rounded-xl border border-slate-700">
+                <h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Option 2: Live Webcam</h3>
+                
+                <div class="aspect-video bg-black rounded-lg overflow-hidden relative mb-4">
+                    <video id="webcamPreview" class="w-full h-full object-cover transform -scale-x-100" autoplay muted playsinline></video>
+                    
+                    <div id="recordingIndicator" class="hidden absolute top-4 right-4 flex items-center space-x-2 bg-red-600/80 backdrop-blur px-3 py-1 rounded-full">
+                        <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <span class="text-xs font-bold text-white">REC</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="startRecordBtn" 
+                        class="bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        <span>Start</span>
+                    </button>
+                    <button id="stopRecordBtn" disabled
+                        class="bg-slate-700 text-slate-400 font-bold py-3 rounded-xl transition-all cursor-not-allowed flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                        <span>Stop</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="signOutputSection" class="mt-8 hidden space-y-6">
+            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">Top Matches</h3>
+                <ul id="signResultsList" class="space-y-2">
+                    <!-- Results injected here -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
