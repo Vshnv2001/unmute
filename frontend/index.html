@@ -28,7 +28,12 @@
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1rem;
             width: 100%;
-            max-width: 1400px;
+            transition: all 0.3s ease;
+        }
+
+        #interpreterGif[src=""],
+        #interpreterGif:not([src]) {
+            display: none;
         }
 
         .video-container {
@@ -154,6 +159,24 @@
             border-radius: 50%;
             animation: pulse 1s infinite;
         }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #14b8a6;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #0f766e;
+        }
     </style>
 </head>
 
@@ -207,7 +230,7 @@
                         class="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto text-blue-400">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v8a2 2 0 002 2z">
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
                             </path>
                         </svg>
                     </div>
@@ -238,15 +261,39 @@
             <div id="participantsList" class="flex -space-x-3"></div>
         </div>
 
-        <!-- Main Content: Video Grid -->
-        <div class="flex-1 flex items-center justify-center">
-            <div id="videoGrid" class="video-grid">
+        <!-- Main Content: Video Grid & SL Panel -->
+        <div class="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden mb-24">
+            <!-- Left: Video Grid -->
+            <div id="videoGrid" class="video-grid flex-1">
                 <!-- Local Video -->
                 <div class="video-container" id="localVideoContainer">
                     <video id="localVideo" muted autoplay playsinline></video>
                     <div class="participant-label">You</div>
-                    <div id="localSLOverlay" class="sl-overlay">
-                        <img id="localSLImg" src="" alt="SL">
+                    <div id="sl-localVideoContainer" class="sl-overlay">
+                        <img src="" alt="SL">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Dedicated SL Panel -->
+            <div id="slPanel" class="w-full md:w-80 glass rounded-3xl p-6 flex flex-col gap-6 border-teal-500/30">
+                <div class="text-center border-b border-slate-700 pb-4">
+                    <h3 class="text-teal-400 font-bold uppercase tracking-wider text-xs">SL Interpreter</h3>
+                </div>
+
+                <div id="mainInterpreter"
+                    class="aspect-square bg-slate-900 rounded-2xl overflow-hidden border border-teal-500/20 relative">
+                    <img id="interpreterGif" src="" alt="Sign Language" class="w-full h-full object-contain">
+                    <div id="interpreterPlaceholder"
+                        class="absolute inset-0 flex items-center justify-center text-slate-600 text-sm text-center p-4">
+                        Signs will appear here as you speak
+                    </div>
+                </div>
+
+                <div class="flex-1 flex flex-col gap-2 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+                    <h4 class="text-slate-500 text-[10px] uppercase font-bold px-1">Transcription History</h4>
+                    <div id="transcriptionHistory" class="space-y-3">
+                        <!-- History items go here -->
                     </div>
                 </div>
             </div>
@@ -254,7 +301,7 @@
 
         <!-- Transcription Ticker (Floating bottom) -->
         <div id="transcriptionTicker"
-            class="absolute bottom-32 left-1/2 transform -translateX-1/2 w-full max-w-2xl px-4">
+            class="absolute bottom-32 left-1/2 transform -translateX-1/2 w-full max-w-xl px-4 pointer-events-none">
             <div
                 class="glass py-3 px-6 rounded-2xl border-teal-500/20 text-center text-slate-200 text-lg font-medium shadow-2xl">
                 <span class="text-teal-400 font-bold" id="speakerName"></span> <span id="transcriptionText"></span>

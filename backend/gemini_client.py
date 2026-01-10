@@ -66,11 +66,14 @@ class GeminiClient:
         try:
             response = self.model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
             text_resp = response.text
+            print(f"Gemini Translation Response: {text_resp}")
             # Parse JSON
             data = json.loads(text_resp)
-            return self.validate_gloss(data)
+            validated = self.validate_gloss(data)
+            print(f"Validated Gloss: {validated.get('gloss')}")
+            return validated
         except Exception as e:
-            print(f"Gemini Error: {e}")
+            print(f"Gemini Translation Error: {e}")
             return {"gloss": [], "unmatched": [], "error": str(e)}
 
     def validate_gloss(self, data: Dict[str, Any]) -> Dict[str, Any]:

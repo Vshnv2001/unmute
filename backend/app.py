@@ -127,10 +127,12 @@ def health():
 
 @app.post("/api/translate", response_model=TranslateResponse)
 def translate(req: GlossRequest):
+    print(f"API HIT: /api/translate with text: '{req.text}'")
     gloss_result = gemini.text_to_gloss(req.text)
     gloss_tokens = gloss_result.get("gloss", [])
     unmatched = gloss_result.get("unmatched", [])
     plan = build_render_plan(gloss_tokens)
+    print(f"TRANSLATE RESPONSE: {len(gloss_tokens)} gloss tokens, {len(plan)} plan items")
     return {
         "gloss": gloss_tokens,
         "unmatched": unmatched,
@@ -147,9 +149,12 @@ class TranscribeResponse(BaseModel):
 
 @app.post("/api/transcribe", response_model=TranscribeResponse)
 def transcribe_audio(req: TranscribeRequest):
+    print(f"API HIT: /api/transcribe (audio length: {len(req.audio_data)} bytes)")
     result = gemini.transcribe_audio(req.audio_data, req.mime_type)
     if "error" in result:
+        print(f"TRANSCRIBE ERROR: {result['error']}")
         raise HTTPException(status_code=400, detail=result["error"])
+    print(f"TRANSCRIBE RESPONSE: '{result.get('transcription', '')}'")
     return {"transcription": result.get("transcription", "")}
 
 if os.path.exists(FRONTEND_PATH):

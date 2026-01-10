@@ -1,6 +1,8 @@
-const BACKEND_URL = window.location.port === '3000' ? 'http://127.0.0.1:8000' : '';
+const BACKEND_URL = window.location.port === '3000' ? `http://${window.location.hostname}:8000` : '';
 const API_URL = `${BACKEND_URL}/api/translate`;
 const TRANSCRIBE_URL = `${BACKEND_URL}/api/transcribe`;
+
+console.log("Unmute Frontend Initialized. Backend URL:", BACKEND_URL || "Relative");
 
 // DOM Elements
 const portalSection = document.getElementById('portalSection');
@@ -15,6 +17,9 @@ const videoGrid = document.getElementById('videoGrid');
 const localVideo = document.getElementById('localVideo');
 const transcriptionText = document.getElementById('transcriptionText');
 const speakerName = document.getElementById('speakerName');
+const interpreterGif = document.getElementById('interpreterGif');
+const interpreterPlaceholder = document.getElementById('interpreterPlaceholder');
+const transcriptionHistory = document.getElementById('transcriptionHistory');
 
 // App State
 let currentUser = localStorage.getItem('displayName');
@@ -199,61 +204,137 @@ function addVideoStream(video, stream, containerId, labelText) {
 // --- SL Intelligence Logic ---
 
 async function startSLIntelligence() {
-    const mediaRecorder = new MediaRecorder(localStream, { mimeType: 'audio/webm' });
-    let audioChunks = [];
+    console.log("SL Intelligence: Initializing MediaRecorder...");
 
-    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-
-    mediaRecorder.onstop = async () => {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        audioChunks = [];
-
-        const base64Audio = await blobToBase64(blob);
-        const transRes = await fetch(TRANSCRIBE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audio_data: base64Audio })
-        });
-
-        if (transRes.ok) {
-            const transData = await transRes.json();
-            const text = transData.transcription;
-
-            if (text && text.trim().length > 2) {
-                const slRes = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text })
-                });
-
-                if (slRes.ok) {
-                    const slData = await slRes.json();
-                    socket.send(JSON.stringify({
-                        type: 'sl-update',
-                        peerId: myPeer.id,
-                        username: currentUser,
-                        transcription: text,
-                        plan: slData.plan
-                    }));
-                    showSLOverlay(myPeer.id, currentUser, text, slData.plan);
-                }
+    // Detect supported mime types
+    let mimeType = 'audio/webm';
+    if (typeof MediaRecorder.isTypeSupported === 'function') {
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            console.log("audio/webm not supported, trying ogg...");
+            mimeType = 'audio/ogg';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                console.log("audio/ogg not supported, using default...");
+                mimeType = '';
             }
         }
-        if (currentRoomId) mediaRecorder.start();
+    }
+
+    let mediaRecorder;
+    try {
+        const options = mimeType ? { mimeType } : {};
+        mediaRecorder = new MediaRecorder(localStream, options);
+    } catch (e) {
+        console.error("Failed to create MediaRecorder:", e);
+        return;
+    }
+
+    let audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+            audioChunks.push(e.data);
+        }
     };
+
+    mediaRecorder.onstop = async () => {
+        if (audioChunks.length === 0) {
+            console.log("SL Intelligence: No audio data captured in this chunk.");
+            restartRecorder();
+            return;
+        }
+
+        try {
+            console.log(`SL Intelligence: Processing ${audioChunks.length} chunks...`);
+            const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+            audioChunks = [];
+
+            const base64Audio = await blobToBase64(blob);
+            console.log(`SL Intelligence: Sending transcription request to ${TRANSCRIBE_URL}...`);
+
+            const transRes = await fetch(TRANSCRIBE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio_data: base64Audio })
+            });
+
+            if (transRes.ok) {
+                const transData = await transRes.json();
+                const text = transData.transcription;
+                console.log("SL Intelligence Transcription result:", text);
+
+                if (text && text.trim().length > 0) {
+                    addToHistory(currentUser, text);
+
+                    console.log("SL Intelligence: Translating to SL...");
+                    const slRes = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    });
+
+                    if (slRes.ok) {
+                        const slData = await slRes.json();
+                        console.log("SL Intelligence: SL Plan received:", slData.plan);
+
+                        socket.send(JSON.stringify({
+                            type: 'sl-update',
+                            peerId: myPeer.id,
+                            username: currentUser,
+                            transcription: text,
+                            plan: slData.plan
+                        }));
+                        showSLOverlay(myPeer.id, currentUser, text, slData.plan);
+                    }
+                }
+            } else {
+                const errData = await transRes.json().catch(() => ({}));
+                console.error("SL Intelligence Transcription API Error:", errData.detail || "Unknown error");
+                interpreterPlaceholder.textContent = `API Error: ${errData.detail || 'Failed to reach backend'}`;
+                interpreterPlaceholder.classList.add('text-red-400');
+            }
+        } catch (err) {
+            console.error("SL Intelligence Loop Error:", err);
+        } finally {
+            restartRecorder();
+        }
+    };
+
+    function restartRecorder() {
+        if (currentRoomId && mediaRecorder.state === 'inactive') {
+            try {
+                mediaRecorder.start();
+                console.log("SL Intelligence: Recorder restarted for next chunk.");
+            } catch (e) {
+                console.error("Failed to restart MediaRecorder:", e);
+            }
+        }
+    }
+
+    // Start initial recording
+    try {
+        mediaRecorder.start();
+        console.log("SL Intelligence: Loop started successfully.");
+    } catch (e) {
+        console.error("Failed to start MediaRecorder:", e);
+    }
 
     transcriptionInterval = setInterval(() => {
         if (mediaRecorder.state === 'recording') {
+            console.log("SL Intelligence Heartbeat: Stopping recorder to process chunk...");
             mediaRecorder.stop();
-        } else {
-            mediaRecorder.start();
+        } else if (mediaRecorder.state === 'inactive') {
+            restartRecorder();
         }
-    }, 4000);
+    }, 2000);
 }
 
 function showSLOverlay(peerId, name, text, plan) {
     speakerName.textContent = `${name}: `;
     transcriptionText.textContent = text;
+
+    // Update main interpreter panel
+    interpreterPlaceholder.style.display = 'none';
+    playSLSequence(interpreterGif, plan);
 
     const containerId = peerId === myPeer.id ? 'localVideoContainer' : peerId;
     const overlay = document.querySelector(`#sl-${containerId}`);
@@ -264,7 +345,7 @@ function showSLOverlay(peerId, name, text, plan) {
     playSLSequence(img, plan, overlay);
 }
 
-async function playSLSequence(imgElem, plan, overlayElem) {
+async function playSLSequence(imgElem, plan, overlayElem = null) {
     for (const item of plan) {
         if (item.type === 'sign' && item.assets.gif) {
             const assetBase = window.location.port === '3000' ? 'http://127.0.0.1:8000' : window.location.origin;
@@ -272,7 +353,16 @@ async function playSLSequence(imgElem, plan, overlayElem) {
             await new Promise(r => setTimeout(r, 2000));
         }
     }
-    setTimeout(() => { if (overlayElem) overlayElem.style.display = 'none'; }, 1000);
+    setTimeout(() => {
+        if (overlayElem) overlayElem.style.display = 'none';
+    }, 1000);
+}
+
+function addToHistory(name, text) {
+    const item = document.createElement('div');
+    item.className = 'bg-slate-900/80 p-3 rounded-xl border border-slate-800 animate-in fade-in slide-in-from-right-4 duration-300';
+    item.innerHTML = `<span class="text-teal-400 font-bold text-xs uppercase block mb-1">${name}</span><p class="text-sm">${text}</p>`;
+    transcriptionHistory.prepend(item);
 }
 
 function blobToBase64(blob) {
