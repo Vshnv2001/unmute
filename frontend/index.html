@@ -140,29 +140,24 @@
             background: rgba(20, 184, 166, 0.1);
         }
 
-        /* Video Container Styles */
-        .video-container {
-            position: relative;
+        /* 3D Avatar Container */
+        #avatarContainer {
             width: 100%;
-            background: #0f172a;
-            border-radius: 12px;
+            height: 350px;
+            background: #111;
+            border-radius: 0.75rem;
             overflow: hidden;
-            border: 1px solid #334155;
-        }
-
-        .video-label {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            z-index: 10;
+            position: relative;
+            margin-bottom: 1rem;
         }
     </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
 </head>
 
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
@@ -323,43 +318,50 @@
                 <div id="glossDisplay" class="flex flex-wrap gap-2">
                     <!-- Gloss tokens injected here -->
                 </div>
-            </div>
 
-            <!-- Player -->
-            <div
-                class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
-                <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
-                <div id="placeholder" class="text-slate-600 flex flex-col items-center">
-                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                        </path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span class="text-sm">Video Area</span>
+                <!-- Side by Side Container -->
+                <div class="flex gap-4 mb-4">
+                    <!-- GIF Player -->
+                    <div
+                        class="flex-1 aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
+                        <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
+                        <div id="placeholder" class="text-slate-600 flex flex-col items-center">
+                            <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                </path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span class="text-sm">GIF Player</span>
+                        </div>
+
+                        <!-- Overlay Label -->
+                        <div id="playerLabel"
+                            class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
+                            TOKEN
+                        </div>
+                    </div>
+
+                    <!-- 3D Avatar Area -->
+                    <div id="avatarContainer" class="flex-1"></div>
                 </div>
 
                 <!-- Controls -->
-                <div class="absolute bottom-4 right-4 space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div class="flex justify-center mb-4">
                     <button id="replayBtn"
-                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-3 py-1 rounded text-sm">Replay</button>
+                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-4 py-2 rounded-lg text-sm transition-all">🔄
+                        Replay</button>
                 </div>
 
-                <!-- Overlay Label -->
-                <div id="playerLabel"
-                    class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
-                    TOKEN
-                </div>
+                <!-- Notes/Status -->
+                <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
+
             </div>
-
-            <!-- Notes/Status -->
-            <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
-
         </div>
-    </div>
 
-    <script src="script.js"></script>
+        <script type="module" src="script.js"></script>
 </body>
 
 </html>
