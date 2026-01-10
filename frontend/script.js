@@ -109,7 +109,7 @@ async function playSequence(plan) {
         if (item.type === 'sign' && item.sign_name) {
             console.log(`Starting sign ${i + 1}/${uniquePlan.length}: ${item.sign_name}`);
 
-            // Show GIF - add timestamp to force reload
+            // Show GIF
             if (item.assets && item.assets.gif) {
                 const gifUrl = `http://127.0.0.1:8000${item.assets.gif}?t=${Date.now()}`;
                 signPlayer.src = gifUrl;
@@ -123,36 +123,31 @@ async function playSequence(plan) {
                 const resp = await fetch(`${LANDMARKS_URL}/${item.sign_name}/landmarks`);
                 if (resp.ok) {
                     const data = await resp.json();
-                    console.log(`Playing skeleton: ${item.token} (${data.frames.length} frames)`);
+                    console.log(`Playing: ${item.token} (${data.frames.length} total frames)`);
 
-                    // Start skeleton animation
-                    const skeletonPromise = avatar.playSequence(data.frames, 30);
+                    // Play both at the same time, wait for BOTH to complete
+                    const skeletonPromise = avatar.playSequence(data.frames, 10);  // 10fps skeleton
+                    const gifPromise = new Promise(r => setTimeout(r, 4000));  // 4s for GIF
 
-                    // Hide GIF after ~3 seconds (typical GIF duration) to prevent visual looping
-                    const gifHidePromise = new Promise(resolve => {
-                        setTimeout(() => {
-                            signPlayer.classList.add('hidden');
-                            signPlayer.src = '';
-                            resolve();
-                        }, 3000);
-                    });
+                    // Wait for whichever takes longer
+                    await Promise.all([skeletonPromise, gifPromise]);
 
-                    // Wait for skeleton to finish (GIF will hide after 3s)
-                    await skeletonPromise;
-                    console.log(`Finished skeleton: ${item.token}`);
+                    console.log(`Finished: ${item.token}`);
                 } else {
                     console.warn(`No 3D data for ${item.sign_name}`);
-                    await new Promise(r => setTimeout(r, 2000));
-                    signPlayer.classList.add('hidden');
-                    signPlayer.src = '';
+                    await new Promise(r => setTimeout(r, 4000));
                 }
             } catch (e) {
                 console.error("Fetch error", e);
             }
 
+            // Hide GIF after both complete
+            signPlayer.classList.add('hidden');
+            signPlayer.src = '';
+
             // Brief pause between words
             if (i < uniquePlan.length - 1) {
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, 500));
             }
 
         } else {

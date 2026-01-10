@@ -119,6 +119,35 @@ export class AvatarController {
                 return;
             }
 
+            // Calculate bounding box to normalize hand size
+            const validPoints = points.filter(p => p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
+            if (validPoints.length === 0) {
+                joints.forEach(j => j.visible = false);
+                bones.forEach(b => b.line.visible = false);
+                return;
+            }
+
+            // Find min/max to get hand size
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            for (const p of validPoints) {
+                minX = Math.min(minX, p[0]);
+                maxX = Math.max(maxX, p[0]);
+                minY = Math.min(minY, p[1]);
+                maxY = Math.max(maxY, p[1]);
+            }
+
+            // Calculate center and size
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const handWidth = maxX - minX;
+            const handHeight = maxY - minY;
+            const handSize = Math.max(handWidth, handHeight);
+
+            // Target size for normalized hand (in world units)
+            const targetSize = 0.3;
+            const normalizeScale = handSize > 0.001 ? targetSize / handSize : 1;
+
             // Update Joints
             for (let i = 0; i < 21; i++) {
                 const p = points[i];
@@ -130,15 +159,14 @@ export class AvatarController {
                     continue;
                 }
 
-                // The pkl data is already centered around 0 (not 0-1 range)
-                // Scale down and center for better viewing
-                const scale = 0.5;  // Make hands smaller
-                const xOff = side === 'left' ? -0.2 : 0.2;
-                const yOff = -0.15;  // Push hands lower
+                // Normalize: center the hand, then scale to standard size
+                const xOff = side === 'left' ? -0.35 : 0.35;  // Separation between hands
+                const yOff = -0.1;  // Push hands lower
+
                 j.position.set(
-                    (p[0] * scale) + xOff,   // X scaled and offset by side
-                    (-p[1] * scale) + yOff,  // Flip Y, push lower
-                    -p[2] * scale * 0.3      // Scale Z (depth)
+                    ((p[0] - centerX) * normalizeScale) + xOff,
+                    (-(p[1] - centerY) * normalizeScale) + yOff,
+                    -p[2] * normalizeScale * 0.3
                 );
                 j.visible = true;
             }
@@ -170,9 +198,26 @@ export class AvatarController {
 
     async playSequence(frames, fps = 30) {
         const interval = 1000 / fps;
-        for (const frame of frames) {
+
+        // Filter to only frames with actual hand data
+        const validFrames = frames.filter(frame => {
+            // Check if either hand has non-zero data
+            const hasLeft = frame.left && frame.left.some(p => p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
+            const hasRight = frame.right && frame.right.some(p => p[0] !== 0 || p[1] !== 0 || p[2] !== 0);
+            return hasLeft || hasRight;
+        });
+
+        console.log(`Playing ${validFrames.length} valid frames (out of ${frames.length} total)`);
+
+        for (const frame of validFrames) {
             this.updateFrame(frame);
             await new Promise(r => setTimeout(r, interval));
         }
+
+        // Hide hands after sequence
+        ['left', 'right'].forEach(side => {
+            this.joints[side].forEach(j => j.visible = false);
+            this.bones[side].forEach(b => b.line.visible = false);
+        });
     }
 }
