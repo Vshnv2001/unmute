@@ -40,11 +40,20 @@ class GeminiClient:
         """Backward compatibility: live_client is the same as client"""
         return self.client
 
-    def text_to_gloss(self, text: str, allowed_tokens: List[str] = None) -> Dict[str, Any]:
+    def text_to_gloss(self, text: str, allowed_tokens: List[str] = None, language: Optional[str] = None) -> Dict[str, Any]:
         """
         Translate text to gloss using permitted tokens.
+        Supports multiple input languages: English, Chinese (Simplified/Traditional), 
+        Malay, Tamil, and others. Auto-detects language if not specified.
+        
         If allowed_tokens is None, fetches all from vocab.
         Uses google.genai Client API (new API).
+        
+        Args:
+            text: Input text in any supported language
+            allowed_tokens: List of allowed vocabulary tokens. If None, auto-fetches.
+            language: Optional language code (e.g., 'en', 'zh', 'ms', 'ta'). 
+                     If None, language is auto-detected.
         """
         if allowed_tokens is None:
             allowed_tokens = vocab.get_allowed_tokens(text)
@@ -55,25 +64,63 @@ class GeminiClient:
         # Construct prompt
         token_str = ", ".join(allowed_tokens)
         
+        # Language-specific instructions
+        language_instructions = ""
+        if language:
+            lang_map = {
+                'en': 'English',
+                'zh': 'Chinese (Simplified or Traditional)',
+                'zh-CN': 'Chinese (Simplified)',
+                'zh-TW': 'Chinese (Traditional)',
+                'ms': 'Malay',
+                'ta': 'Tamil',
+                'hi': 'Hindi',
+                'es': 'Spanish',
+                'fr': 'French',
+                'de': 'German',
+                'ja': 'Japanese',
+                'ko': 'Korean'
+            }
+            lang_name = lang_map.get(language.lower(), language)
+            language_instructions = f"\n        Input Language: {lang_name}. Translate from {lang_name} to SGSL Gloss."
+        else:
+            language_instructions = """
+        First, detect the input language automatically. The input may be in:
+        - English
+        - Chinese (Simplified or Traditional)
+        - Malay
+        - Tamil
+        - Hindi
+        - Other languages
+        
+        Then translate from the detected language to SGSL Gloss."""
+        
         prompt = f"""
-        You are a Singapore Sign Language (SGSL) translator.
-        Translate the following English text into SGSL Gloss.
+        You are a multilingual Singapore Sign Language (SGSL) translator.
+        Your task is to translate text from ANY language into SGSL Gloss tokens.
+        {language_instructions}
         
-        Constraint: SGSL often uses Subject-Object-Verb or Topic-Comment structure.
-        Constraint: You MUST use ONLY words from the provided vocabulary list below.
-        If a concept is not in the vocabulary, try to find a synonym in the vocabulary (e.g., "MUM" -> "MOTHER").
-        If you cannot translate key parts, put the original word in 'unmatched'.
+        Important Constraints:
+        1. SGSL often uses Subject-Object-Verb (SOV) or Topic-Comment structure, different from English SVO.
+        2. You MUST use ONLY words from the provided vocabulary list below.
+        3. For words not in vocabulary, try synonyms (e.g., "MUM" -> "MOTHER", "Mama" -> "MOTHER").
+        4. Consider cultural context - SGSL reflects Singapore's multilingual environment.
+        5. For Chinese input: Consider tone and context; map to appropriate SGSL concepts.
+        6. For Malay/Tamil input: Translate meaningfully, not word-by-word.
+        7. If key concepts cannot be translated, include them in 'unmatched' array.
+        8. Preserve the semantic meaning and intent of the original text.
         
-        Vocabulary:
+        Vocabulary (use ONLY these tokens):
         [{token_str}]
         
         Input Text: "{text}"
         
-        Output JSON format strictly:
+        Output JSON format strictly (no markdown, no code blocks):
         {{
           "gloss": ["TOKEN1", "TOKEN2", ...],
           "unmatched": ["word1", ...],
-          "notes": "explanation"
+          "notes": "Brief explanation of translation choices and detected language",
+          "detected_language": "language code if auto-detected"
         }}
         """
         
@@ -183,21 +230,35 @@ class GeminiClient:
             print(f"Error converting audio to PCM: {e}")
             raise  # Re-raise to allow fallback handling
 
-    async def transcribe_audio_live(self, audio_base64: str, mime_type: str = "audio/webm") -> Dict[str, Any]:
+    async def transcribe_audio_live(self, audio_base64: str, mime_type: str = "audio/webm", language: Optional[str] = None) -> Dict[str, Any]:
         """
         Transcribe audio using standard Gemini API.
         This method uses the standard generate_content API for reliable transcription.
         Maintains async interface for compatibility with endpoint.
+        
+        Args:
+            audio_base64: Base64 encoded audio data
+            mime_type: MIME type of the audio (default: "audio/webm")
+            language: Optional language code for transcription
         """
         # Use the working standard transcription method
         # Run it in a thread pool to maintain async interface
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.transcribe_audio, audio_base64, mime_type)
+        return await loop.run_in_executor(None, self.transcribe_audio, audio_base64, mime_type, language)
 
-    def transcribe_audio(self, audio_base64: str, mime_type: str = "audio/webm") -> Dict[str, Any]:
+    def transcribe_audio(self, audio_base64: str, mime_type: str = "audio/webm", language: Optional[str] = None) -> Dict[str, Any]:
         """
         Transcribe audio to text using Gemini's multimodal capabilities.
+        Supports multiple languages: English, Chinese (Simplified/Traditional), 
+        Malay, Tamil, Hindi, and others. Auto-detects language if not specified.
+        
         Uses google.genai Client API with gemini-3-flash-preview.
+        
+        Args:
+            audio_base64: Base64 encoded audio data
+            mime_type: MIME type of the audio (default: "audio/webm")
+            language: Optional language code (e.g., 'en', 'zh', 'ms', 'ta').
+                     If None, language is auto-detected from audio.
         """
         if not self.client:
             return {
@@ -213,17 +274,55 @@ class GeminiClient:
                 "error": f"Failed to decode audio: {str(e)}"
             }
         
-        prompt = """
-        You are a highly accurate transcription assistant.
-        Listen to the provided audio carefully and transcribe it exactly into English text.
-        Do not include any interpretations, just the spoken words.
+        # Language-specific instructions
+        language_instructions = ""
+        if language:
+            lang_map = {
+                'en': 'English',
+                'zh': 'Chinese (Simplified or Traditional)',
+                'zh-CN': 'Chinese (Simplified)',
+                'zh-TW': 'Chinese (Traditional)',
+                'ms': 'Malay',
+                'ta': 'Tamil',
+                'hi': 'Hindi',
+                'es': 'Spanish',
+                'fr': 'French',
+                'de': 'German',
+                'ja': 'Japanese',
+                'ko': 'Korean'
+            }
+            lang_name = lang_map.get(language.lower(), language)
+            language_instructions = f"Transcribe the audio in {lang_name}. Output the transcription in the original language (do not translate to English)."
+        else:
+            language_instructions = """Automatically detect the spoken language from the audio. The audio may contain:
+        - English
+        - Chinese (Simplified or Traditional)
+        - Malay
+        - Tamil
+        - Hindi
+        - Other languages
         
-        If no speech is detected, return an empty string for transcription.
+        Transcribe exactly as spoken in the original language. Do not translate to English - preserve the original language of the transcription."""
         
-        Output format: JSON
-        {
-          "transcription": "The spoken text"
-        }
+        prompt = f"""
+        You are a highly accurate multilingual transcription assistant.
+        Listen to the provided audio carefully and transcribe it exactly as spoken.
+        
+        {language_instructions}
+        
+        Important guidelines:
+        1. Transcribe exactly what is spoken - do not add interpretations or corrections.
+        2. Preserve the original language of the speech.
+        3. Include punctuation and capitalization as appropriate.
+        4. For Chinese transcriptions, use appropriate characters (Simplified or Traditional based on what was spoken).
+        5. If multiple languages are spoken, transcribe each in its original language.
+        6. If no speech is detected, return an empty string for transcription.
+        
+        Output format: JSON (no markdown, no code blocks)
+        {{
+          "transcription": "The spoken text in original language",
+          "detected_language": "language code if auto-detected (e.g., 'en', 'zh', 'ms', 'ta')"
+        }}
         """
         
         try:

@@ -4,151 +4,805 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGSL Translator - Voice & Video</title>
+    <title>Unmute — SGSL Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            /* Warm Beige Palette - like a cozy blanket */
+            --bg-warm: #FDF8F3;
+            --bg-cream: #FAF6F1;
+            --bg-card: #FFFFFF;
+            --bg-input: #FBF9F7;
+            --border-soft: rgba(180, 160, 140, 0.2);
+            --border-warm: rgba(180, 160, 140, 0.35);
+            --text-primary: #3D3632;
+            --text-secondary: #6B5E54;
+            --text-muted: #9C8B7E;
+            --text-light: #B8A99A;
+            --accent-terracotta: #C67B5C;
+            --accent-warm: #D4956A;
+            --accent-soft: #E8C4A8;
+            --accent-gradient: linear-gradient(135deg, #C67B5C 0%, #D4956A 50%, #E8C4A8 100%);
+            --shadow-soft: 0 4px 24px rgba(60, 50, 40, 0.06);
+            --shadow-warm: 0 8px 40px rgba(180, 140, 100, 0.12);
+            --shadow-hover: 0 12px 48px rgba(180, 140, 100, 0.18);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Outfit', sans-serif;
-        }
-
-        /* Microphone button animations */
-        @keyframes pulse-ring {
-            0% {
-                transform: scale(0.8);
-                opacity: 0.8;
-            }
-
-            50% {
-                transform: scale(1.2);
-                opacity: 0.4;
-            }
-
-            100% {
-                transform: scale(0.8);
-                opacity: 0.8;
-            }
-        }
-
-        @keyframes recording-pulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-            }
-
-            50% {
-                box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
-            }
-        }
-
-        .recording {
-            animation: recording-pulse 1.5s infinite;
-            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-        }
-
-        .btn-fancy {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-warm);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
             position: relative;
-            transition: all 0.3s ease;
         }
 
-        .btn-fancy:hover:not(:disabled) {
+        /* Soft warm gradient background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 0% 0%, rgba(232, 196, 168, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 100% 100%, rgba(212, 149, 106, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(198, 123, 92, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Subtle paper texture */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.02;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .logo {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .title {
+            font-family: 'Fraunces', serif;
+            font-size: clamp(2.5rem, 7vw, 4.5rem);
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+
+        .title-accent {
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-top: 0.75rem;
+            font-weight: 400;
+        }
+
+        /* Main Layout - Two Pane Grid */
+        .main-layout {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 2rem;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        @media (max-width: 1024px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .left-panel,
+            .right-panel {
+                padding: 2rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                padding: 2rem 1rem;
+            }
+
+            .left-panel,
+            .right-panel {
+                padding: 1.5rem;
+                border-radius: 24px;
+            }
+
+            .main-layout {
+                gap: 1rem;
+            }
+        }
+
+        /* Left Panel */
+        .left-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 32px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow-warm);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Right Panel */
+        .right-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 32px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow-warm);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            min-height: 600px;
+        }
+
+        /* Legacy main-card for backwards compatibility */
+        .main-card {
+            width: 100%;
+            max-width: 820px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 32px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow-warm);
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        /* Mode Tabs */
+        .mode-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+
+        .tabs-container {
+            display: flex;
+            gap: 6px;
+            padding: 6px;
+            background: var(--bg-cream);
+            border-radius: 20px;
+            border: 1px solid var(--border-soft);
+        }
+
+        .mode-tab {
+            padding: 0.875rem 1.75rem;
+            border-radius: 14px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .mode-tab.active {
+            background: var(--bg-card);
+            color: var(--accent-terracotta);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .mode-tab:not(.active):hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .mode-tab svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+        }
+
+        /* Text Input Section */
+        .input-section {
+            animation: fadeIn 0.5s ease;
+        }
+
+        .text-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border-soft);
+            border-radius: 20px;
+            padding: 1.25rem 1.5rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1.0625rem;
+            color: var(--text-primary);
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
+            min-height: 130px;
+            line-height: 1.6;
+        }
+
+        .text-input::placeholder {
+            color: var(--text-light);
+        }
+
+        .text-input:focus {
+            border-color: var(--accent-terracotta);
+            background: var(--bg-card);
+            box-shadow: 0 0 0 4px rgba(198, 123, 92, 0.1);
+        }
+
+        /* Translate Button */
+        .translate-btn {
+            width: 100%;
+            margin-top: 1.25rem;
+            padding: 1.125rem 2rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 16px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 16px rgba(198, 123, 92, 0.3);
+        }
+
+        .translate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(198, 123, 92, 0.4);
+        }
+
+        .translate-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        /* Voice Input Section */
+        .voice-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2.5rem 0;
+        }
+
+        .mic-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: var(--bg-cream);
+            border: 2px solid var(--border-warm);
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mic-button::before {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: -1;
+        }
+
+        .mic-button:hover {
+            border-color: var(--accent-terracotta);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-hover);
             transform: scale(1.05);
         }
 
-        .btn-fancy:active:not(:disabled) {
-            transform: scale(0.95);
+        .mic-button:hover::before {
+            opacity: 0.15;
         }
 
-        /* Audio wave visualization */
+        .mic-button svg {
+            width: 40px;
+            height: 40px;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .mic-button:hover svg {
+            color: var(--accent-terracotta);
+        }
+
+        /* Recording State */
+        .mic-button.recording {
+            border-color: #E07A5F;
+            background: #FEF3F0;
+            animation: pulse-recording 1.8s ease-in-out infinite;
+        }
+
+        .mic-button.recording::before {
+            background: linear-gradient(135deg, #E07A5F, #F2A285);
+            opacity: 0.25;
+        }
+
+        .mic-button.recording svg {
+            color: #E07A5F;
+        }
+
+        @keyframes pulse-recording {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(224, 122, 95, 0.3), var(--shadow-soft);
+            }
+            50% {
+                box-shadow: 0 0 0 16px rgba(224, 122, 95, 0), var(--shadow-warm);
+            }
+        }
+
+        .mic-status {
+            margin-top: 1.25rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Audio Wave */
         .audio-wave {
             display: flex;
             align-items: center;
-            gap: 3px;
-            height: 24px;
+            justify-content: center;
+            gap: 5px;
+            height: 36px;
+            margin-top: 1.25rem;
         }
 
         .audio-wave .bar {
             width: 4px;
-            background: linear-gradient(to top, #14b8a6, #3b82f6);
-            border-radius: 2px;
-            animation: wave 0.5s ease-in-out infinite;
+            background: var(--accent-gradient);
+            border-radius: 4px;
+            animation: wave 0.7s ease-in-out infinite;
         }
 
-        .audio-wave .bar:nth-child(1) {
-            animation-delay: 0s;
-        }
-
-        .audio-wave .bar:nth-child(2) {
-            animation-delay: 0.1s;
-        }
-
-        .audio-wave .bar:nth-child(3) {
-            animation-delay: 0.2s;
-        }
-
-        .audio-wave .bar:nth-child(4) {
-            animation-delay: 0.3s;
-        }
-
-        .audio-wave .bar:nth-child(5) {
-            animation-delay: 0.4s;
-        }
+        .audio-wave .bar:nth-child(1) { animation-delay: 0s; height: 10px; }
+        .audio-wave .bar:nth-child(2) { animation-delay: 0.12s; height: 18px; }
+        .audio-wave .bar:nth-child(3) { animation-delay: 0.24s; height: 28px; }
+        .audio-wave .bar:nth-child(4) { animation-delay: 0.36s; height: 18px; }
+        .audio-wave .bar:nth-child(5) { animation-delay: 0.48s; height: 10px; }
 
         @keyframes wave {
-
-            0%,
-            100% {
-                height: 8px;
-            }
-
-            50% {
-                height: 24px;
-            }
+            0%, 100% { transform: scaleY(0.5); opacity: 0.6; }
+            50% { transform: scaleY(1); opacity: 1; }
         }
 
-        /* Input mode tabs */
-        .mode-tab {
-            transition: all 0.3s ease;
-        }
-
-        .mode-tab.active {
-            background: linear-gradient(135deg, #14b8a6, #3b82f6);
-            color: white !important;
-        }
-
-        .mode-tab:not(.active):hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        /* Editable transcription */
-        .editable-transcription {
-            background: transparent;
-            border: 1px dashed rgba(20, 184, 166, 0.5);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: #5eead4;
-            font-size: 1.125rem;
+        /* Transcription Review */
+        .transcription-review {
             width: 100%;
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: var(--bg-cream);
+            border: 1px solid var(--border-soft);
+            border-radius: 20px;
+        }
+
+        .review-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .transcription-input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-soft);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1.0625rem;
+            color: var(--text-primary);
             outline: none;
             transition: all 0.3s ease;
         }
 
-        .editable-transcription:focus {
-            border-color: #14b8a6;
-            background: rgba(20, 184, 166, 0.1);
+        .transcription-input:focus {
+            border-color: var(--accent-terracotta);
+            box-shadow: 0 0 0 3px rgba(198, 123, 92, 0.1);
         }
 
-        /* 3D Avatar Container */
-        #avatarContainer {
-            width: 100%;
-            height: 350px;
-            background: #111;
-            border-radius: 0.75rem;
+        .review-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .btn-confirm {
+            flex: 1;
+            padding: 0.9rem 1.25rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(198, 123, 92, 0.25);
+        }
+
+        .btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(198, 123, 92, 0.35);
+        }
+
+        .btn-retry {
+            padding: 0.9rem 1.25rem;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-warm);
+            border-radius: 12px;
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-retry:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+            background: var(--bg-cream);
+        }
+
+        /* Output Section */
+        .output-section {
+            margin-top: 2.5rem;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .output-section-right {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-soft), transparent);
+            margin-bottom: 2rem;
+        }
+
+        .gloss-container {
+            margin-bottom: 1.75rem;
+        }
+
+        .gloss-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.875rem;
+        }
+
+        .gloss-tokens {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .gloss-token {
+            padding: 0.5rem 0.875rem;
+            background: var(--bg-cream);
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .gloss-token.active {
+            border-color: var(--accent-terracotta);
+            background: rgba(198, 123, 92, 0.08);
+            color: var(--accent-terracotta);
+        }
+
+        .gloss-token.missing {
+            border-color: rgba(200, 100, 80, 0.3);
+            color: rgba(200, 100, 80, 0.7);
+            text-decoration: line-through;
+        }
+
+        /* Players Container - Now vertical stack in right panel */
+        .players-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+            flex: 1;
+        }
+
+        /* Right panel players container - split top/bottom */
+        .right-panel .players-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Ensure right panel output section takes full height */
+        .right-panel .output-section-right {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .right-panel .player-card {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .right-panel .player-content {
+            flex: 1;
+            min-height: 0;
+            aspect-ratio: unset;
+        }
+
+        .right-panel #avatarContainer {
+            flex: 1;
+            min-height: 0;
+            aspect-ratio: unset;
+        }
+
+        @media (max-width: 768px) {
+            .players-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .player-card {
+            background: var(--bg-cream);
+            border: 1px solid var(--border-soft);
+            border-radius: 20px;
             overflow: hidden;
+        }
+
+        .player-header {
+            padding: 0.875rem 1.125rem;
+            border-bottom: 1px solid var(--border-soft);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+        }
+
+        .player-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .player-badge {
+            padding: 0.25rem 0.625rem;
+            background: var(--accent-gradient);
+            border-radius: 8px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: white;
+            letter-spacing: 0.05em;
+        }
+
+        .player-content {
+            aspect-ratio: 16/10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-input);
             position: relative;
-            margin-bottom: 1rem;
+        }
+
+        .player-content img {
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .player-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.625rem;
+            color: var(--text-light);
+        }
+
+        .player-placeholder svg {
+            width: 44px;
+            height: 44px;
+            opacity: 0.4;
+        }
+
+        .player-placeholder span {
+            font-size: 0.8rem;
+        }
+
+        #avatarContainer {
+            aspect-ratio: 16/10;
+            background: var(--bg-input);
+        }
+
+        /* Override for right panel avatar */
+        .right-panel #avatarContainer {
+            aspect-ratio: unset;
+            height: 100%;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-top: auto;
+            padding-top: 1.25rem;
+        }
+
+        .control-btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-warm);
+            border-radius: 12px;
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            border-color: var(--accent-terracotta);
+            color: var(--accent-terracotta);
+            background: rgba(198, 123, 92, 0.05);
+        }
+
+        /* Status Notes */
+        .status-notes {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-24px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-cream);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-warm);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-light);
+        }
+
+        /* Legacy class mappings for JS compatibility */
+        .recording {
+            border-color: #E07A5F !important;
+            animation: pulse-recording 1.8s ease-in-out infinite !important;
+        }
+        
+        .editable-transcription {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-soft);
+            border-radius: 12px;
+            padding: 1rem;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1.0625rem;
+            color: var(--text-primary);
+            outline: none;
         }
     </style>
     <script type="importmap">
@@ -160,208 +814,151 @@
     </script>
 </head>
 
-<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">Singapore Sign Language</div>
+            <h1 class="title">un<span class="title-accent">mute</span></h1>
+            <p class="subtitle">Translate words into signs, effortlessly</p>
+        </header>
 
-    <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
-        <h1
-            class="text-4xl font-bold mb-2 text-center bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
-            Unmute: SGSL Voice & Video
-        </h1>
-        <p class="text-slate-400 text-center mb-6">Singapore Sign Language Communication (WebRTC Demo)</p>
-
-        <!-- Input Mode Tabs -->
-        <div class="flex justify-center mb-6">
-            <div class="bg-slate-900/50 p-1 rounded-xl flex gap-1 border border-slate-700">
-                <button id="voiceModeTab"
-                    class="mode-tab active px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                    Voice
-                </button>
-                <button id="videoModeTab"
-                    class="mode-tab px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 text-slate-400">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Video
-                </button>
-            </div>
-        </div>
-
-        <!-- Voice Input Section -->
-        <div id="voiceInputSection" class="space-y-4">
-            <!-- Microphone Button -->
-            <div class="flex flex-col items-center justify-center py-6">
-                <button id="micBtn"
-                    class="btn-fancy mic-btn w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-teal-500/25 mb-4">
-                    <svg id="micIcon" class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                    <svg id="stopIcon" class="w-10 h-10 hidden" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                </button>
-
-                <p id="micStatus" class="text-slate-400 text-sm font-medium">Click to start recording</p>
-
-                <!-- Audio Wave Visualization (shown when recording) -->
-                <div id="audioWave" class="audio-wave hidden mt-4">
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                </div>
-            </div>
-
-            <!-- Processing Status -->
-            <div id="processingStatus" class="hidden text-center py-4">
-                <div
-                    class="inline-flex items-center gap-3 bg-slate-900/50 px-6 py-3 rounded-xl border border-slate-700">
-                    <svg class="animate-spin w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <span id="processingText" class="text-slate-300 font-medium">Processing audio...</span>
-                </div>
-            </div>
-
-            <!-- Transcription Review Section -->
-            <div id="transcriptionReviewSection"
-                class="hidden bg-slate-900/50 rounded-xl p-5 border border-slate-700 space-y-4">
-                <div>
-                    <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">Transcription (edit if needed)
-                    </h3>
-                    <input type="text" id="transcriptionInput" class="editable-transcription"
-                        placeholder="Transcribed text will appear here...">
-                </div>
-
-                <div class="flex gap-3">
-                    <button id="confirmTranscriptionBtn"
-                        class="flex-1 bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                        Confirm & Translate
-                    </button>
-                    <button id="retryRecordingBtn"
-                        class="px-6 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Retry
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Video Input Section -->
-        <div id="videoInputSection" class="hidden space-y-6">
-            <div class="bg-slate-900/50 p-6 rounded-xl border border-slate-700 space-y-4">
-                <div class="flex items-center justify-between bg-slate-800 p-4 rounded-lg">
-                    <div class="flex flex-col">
-                        <span class="text-xs text-slate-500 uppercase font-bold">Your Peer ID</span>
-                        <span id="myPeerId" class="text-teal-400 font-mono text-lg">Initializing...</span>
-                    </div>
-                    <button id="copyPeerId" class="text-slate-400 hover:text-white transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="flex gap-2">
-                    <input type="text" id="remotePeerId" placeholder="Enter remote Peer ID to call..."
-                        class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 outline-none focus:border-teal-500 transition-colors">
-                    <button id="callBtn"
-                        class="bg-teal-600 hover:bg-teal-500 px-6 py-2 rounded-lg font-bold transition-all btn-fancy">
-                        Call
-                    </button>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-                <div class="video-container aspect-video">
-                    <div class="video-label">Local Stream</div>
-                    <video id="localVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
-                </div>
-                <div class="video-container aspect-video">
-                    <div class="video-label">Remote Stream</div>
-                    <video id="remoteVideo" autoplay playsinline
-                        class="w-full h-full object-cover bg-slate-950"></video>
-                    <div id="videoPlaceholder"
-                        class="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none">
-                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Output Section -->
-        <div id="outputSection" class="mt-8 hidden space-y-6">
-
-            <!-- Gloss Display -->
-            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-xs uppercase tracking-widest text-slate-500 mb-2">SGSL Gloss Structure</h3>
-                <div id="glossDisplay" class="flex flex-wrap gap-2">
-                    <!-- Gloss tokens injected here -->
-                </div>
-
-                <!-- Side by Side Container -->
-                <div class="flex gap-4 mb-4">
-                    <!-- GIF Player -->
-                    <div
-                        class="flex-1 aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-slate-700 relative flex items-center justify-center group">
-                        <img id="signPlayer" src="" class="h-full object-contain hidden" alt="Sign Language Playback">
-                        <div id="placeholder" class="text-slate-600 flex flex-col items-center">
-                            <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                                </path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        <!-- Main Layout - Two Pane -->
+        <main class="main-layout">
+            <!-- Left Panel -->
+            <div class="left-panel">
+                <!-- Mode Tabs -->
+                <div class="mode-tabs">
+                    <div class="tabs-container">
+                        <button id="textModeTab" class="mode-tab active">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                            <span class="text-sm">GIF Player</span>
-                        </div>
+                            <span>Text</span>
+                        </button>
+                        <button id="voiceModeTab" class="mode-tab">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            <span>Voice</span>
+                        </button>
+                    </div>
+                </div>
 
-                        <!-- Overlay Label -->
-                        <div id="playerLabel"
-                            class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1 rounded text-sm font-mono text-teal-400 hidden">
-                            TOKEN
+                <!-- Text Input Section -->
+                <div id="textInputSection" class="input-section">
+                    <textarea id="inputText" class="text-input" rows="4" placeholder="What would you like to say?"></textarea>
+                    <button id="translateBtn" class="translate-btn">
+                        Translate to Sign Language
+                    </button>
+                </div>
+
+                <!-- Voice Input Section -->
+                <div id="voiceInputSection" class="input-section hidden">
+                    <div class="voice-section">
+                        <button id="micBtn" class="mic-button">
+                            <svg id="micIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            <svg id="stopIcon" class="hidden" fill="currentColor" viewBox="0 0 24 24">
+                                <rect x="6" y="6" width="12" height="12" rx="2" />
+                            </svg>
+                        </button>
+                        <p id="micStatus" class="mic-status">Tap to start speaking</p>
+                        
+                        <div id="audioWave" class="audio-wave hidden">
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
                         </div>
                     </div>
 
-                    <!-- 3D Avatar Area -->
-                    <div id="avatarContainer" class="flex-1"></div>
+                    <!-- Transcription Review -->
+                    <div id="transcriptionReviewSection" class="transcription-review hidden">
+                        <div class="review-label">What we heard</div>
+                        <input type="text" id="transcriptionInput" class="transcription-input" placeholder="Your words will appear here...">
+                        <div class="review-actions">
+                            <button id="confirmTranscriptionBtn" class="btn-confirm">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Looks good
+                            </button>
+                            <button id="retryRecordingBtn" class="btn-retry">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Try again
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Controls -->
-                <div class="flex justify-center mb-4">
-                    <button id="replayBtn"
-                        class="bg-white/10 hover:bg-white/20 backdrop-blur px-4 py-2 rounded-lg text-sm transition-all">🔄
-                        Replay</button>
+                <!-- Output Section - Gloss Display in Left Panel -->
+                <div id="outputSection" class="output-section hidden">
+                    <div class="section-divider"></div>
+
+                    <!-- Gloss Display -->
+                    <div class="gloss-container">
+                        <div class="gloss-label">Sign Sequence</div>
+                        <div id="glossDisplay" class="gloss-tokens"></div>
+                    </div>
+
+                    <!-- Status -->
+                    <div id="statusNotes" class="status-notes"></div>
                 </div>
-
-                <!-- Notes/Status -->
-                <div id="statusNotes" class="text-sm text-slate-400 text-center italic"></div>
-
             </div>
-        </div>
 
-        <script type="module" src="script.js"></script>
+            <!-- Right Panel -->
+            <div class="right-panel">
+                <div id="outputSectionRight" class="output-section-right hidden">
+                    <!-- Players - Vertical Stack -->
+                    <div class="players-grid">
+                        <!-- GIF Player - Top Half -->
+                        <div class="player-card">
+                            <div class="player-header">
+                                <span class="player-title">Reference</span>
+                                <span id="playerLabel" class="player-badge hidden">TOKEN</span>
+                            </div>
+                            <div class="player-content">
+                                <img id="signPlayer" src="" class="hidden" alt="Sign Language">
+                                <div id="placeholder" class="player-placeholder">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Ready when you are</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3D Avatar - Bottom Half -->
+                        <div class="player-card">
+                            <div class="player-header">
+                                <span class="player-title">Avatar</span>
+                                <span class="player-badge">Live</span>
+                            </div>
+                            <div id="avatarContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="controls">
+                        <button id="replayBtn" class="control-btn">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Play again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>
