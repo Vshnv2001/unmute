@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap');
+
+/* Warm Beige Theme - CSS Variables */
+@theme {
+  /* Background colors */
+  --color-bg-warm: #FDF8F3;
+  --color-bg-cream: #FAF6F1;
+  --color-bg-card: #FFFFFF;
+  --color-bg-input: #FBF9F7;
+
+  /* Border colors */
+  --color-border-soft: rgba(180, 160, 140, 0.2);
+  --color-border-warm: rgba(180, 160, 140, 0.35);
+
+  /* Text colors */
+  --color-text-primary: #3D3632;
+  --color-text-secondary: #6B5E54;
+  --color-text-muted: #9C8B7E;
+  --color-text-light: #B8A99A;
+
+  /* Accent colors */
+  --color-accent-terracotta: #C67B5C;
+  --color-accent-warm: #D4956A;
+  --color-accent-soft: #E8C4A8;
+
+  /* Shadows */
+  --shadow-soft: 0 4px 24px rgba(60, 50, 40, 0.06);
+  --shadow-warm: 0 8px 40px rgba(180, 140, 100, 0.12);
+  --shadow-hover: 0 12px 48px rgba(180, 140, 100, 0.18);
+
+  /* Fonts */
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+
+  /* Custom spacing */
+  --radius-card: 32px;
+  --radius-button: 16px;
+  --radius-input: 20px;
+}
+
+/* Base layer styles */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg-warm);
+    color: var(--color-text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Soft warm gradient background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+      radial-gradient(ellipse at 0% 0%, rgba(232, 196, 168, 0.3) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(212, 149, 106, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(198, 123, 92, 0.05) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Subtle paper texture */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.02;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  #root {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg-cream);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-warm);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-light);
+  }
+}
+
+/* Custom animations */
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-recording {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(224, 122, 95, 0.3), var(--shadow-soft);
+    }
+    50% {
+      box-shadow: 0 0 0 16px rgba(224, 122, 95, 0), var(--shadow-warm);
+    }
+  }
+
+  @keyframes wave {
+    0%, 100% { 
+      transform: scaleY(0.5); 
+      opacity: 0.6; 
+    }
+    50% { 
+      transform: scaleY(1); 
+      opacity: 1; 
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease;
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.8s ease-out;
+  }
+
+  .animate-fade-in-down {
+    animation: fadeInDown 0.8s ease-out;
+  }
+
+  .animate-pulse-recording {
+    animation: pulse-recording 1.8s ease-in-out infinite;
+  }
+
+  .animate-wave {
+    animation: wave 0.7s ease-in-out infinite;
+  }
+
+  /* Gradient text utility */
+  .text-gradient {
+    background: linear-gradient(135deg, #C67B5C 0%, #D4956A 50%, #E8C4A8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Gradient background utility */
+  .bg-gradient-accent {
+    background: linear-gradient(135deg, #C67B5C 0%, #D4956A 50%, #E8C4A8 100%);
+  }
+}

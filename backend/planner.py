@@ -9,7 +9,6 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 from backend.vocab import vocab
-
 def build_render_plan(gloss_tokens: List[str]) -> List[Dict[str, Any]]:
     """
     Convert a list of gloss tokens into a rendering plan with asset URLs.

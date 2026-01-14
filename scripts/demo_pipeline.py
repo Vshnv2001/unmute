@@ -8,7 +8,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.gemini_client import GeminiClient
 from backend.planner import build_render_plan
 from backend.vocab import vocab
-
 def run_demo(text):
     print(f"\n🎥 Text-to-SGSL Demo Pipeline 🎥")
     print(f"Input Text: \"{text}\"")
