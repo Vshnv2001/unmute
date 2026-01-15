@@ -2,6 +2,8 @@ import * as THREE from "three"
 
 export interface PoseFrame {
   pose?: number[][]
+  left_hand?: number[][]
+  right_hand?: number[][]
 }
 
 interface BoneConnection {
@@ -9,6 +11,22 @@ interface BoneConnection {
   start: number
   end: number
 }
+
+// MediaPipe Hand landmark connections (21 landmarks per hand)
+const HAND_CONNECTIONS = [
+  // Thumb
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  // Index finger
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  // Middle finger
+  [0, 9], [9, 10], [10, 11], [11, 12],
+  // Ring finger
+  [0, 13], [13, 14], [14, 15], [15, 16],
+  // Pinky
+  [0, 17], [17, 18], [18, 19], [19, 20],
+  // Palm
+  [5, 9], [9, 13], [13, 17],
+]
 
 export class AvatarController {
   private container: HTMLElement
@@ -18,6 +36,11 @@ export class AvatarController {
   private joints: THREE.Mesh[] = []
   private bones: BoneConnection[] = []
   private connections: number[][] = []
+  // Hand-specific meshes
+  private leftHandJoints: THREE.Mesh[] = []
+  private rightHandJoints: THREE.Mesh[] = []
+  private leftHandBones: BoneConnection[] = []
+  private rightHandBones: BoneConnection[] = []
   private animationFrameId: number | null = null
 
   constructor(container: HTMLElement) {
@@ -29,6 +52,7 @@ export class AvatarController {
 
     this.initScene()
     this.createRig()
+    this.createHandRig()
     this.animate()
     console.log('[Avatar] AvatarController initialized, canvas appended')
   }
@@ -120,22 +144,198 @@ export class AvatarController {
     })
   }
 
+  private createHandRig(): void {
+    // Create hand joints (21 per hand)
+    const geometry = new THREE.SphereGeometry(0.012, 8, 8)
+    const leftHandMat = new THREE.MeshLambertMaterial({ color: 0x4488ff })  // Blue for left
+    const rightHandMat = new THREE.MeshLambertMaterial({ color: 0xff8844 }) // Orange for right
+    const leftLineMat = new THREE.LineBasicMaterial({ color: 0x2266cc })
+    const rightLineMat = new THREE.LineBasicMaterial({ color: 0xcc6622 })
+
+    // Left hand joints
+    for (let i = 0; i < 21; i++) {
+      const mesh = new THREE.Mesh(geometry, leftHandMat)
+      mesh.visible = false
+      this.scene.add(mesh)
+      this.leftHandJoints.push(mesh)
+    }
+
+    // Right hand joints
+    for (let i = 0; i < 21; i++) {
+      const mesh = new THREE.Mesh(geometry, rightHandMat)
+      mesh.visible = false
+      this.scene.add(mesh)
+      this.rightHandJoints.push(mesh)
+    }
+
+    // Left hand bones
+    HAND_CONNECTIONS.forEach((conn) => {
+      const lineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+      ])
+      const line = new THREE.Line(lineGeom, leftLineMat)
+      line.visible = false
+      this.scene.add(line)
+      this.leftHandBones.push({ line, start: conn[0], end: conn[1] })
+    })
+
+    // Right hand bones
+    HAND_CONNECTIONS.forEach((conn) => {
+      const lineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+      ])
+      const line = new THREE.Line(lineGeom, rightLineMat)
+      line.visible = false
+      this.scene.add(line)
+      this.rightHandBones.push({ line, start: conn[0], end: conn[1] })
+    })
+  }
+
   private animate = (): void => {
     this.animationFrameId = requestAnimationFrame(this.animate)
     this.renderer.render(this.scene, this.camera)
   }
 
-  updateFrame(frame: PoseFrame | null): boolean {
-    if (!frame) {
-      this.joints.forEach((j) => (j.visible = false))
-      this.bones.forEach((b) => (b.line.visible = false))
+  private hideAllPose(): void {
+    this.joints.forEach((j) => (j.visible = false))
+    this.bones.forEach((b) => (b.line.visible = false))
+  }
+
+  private hideAllHands(): void {
+    this.leftHandJoints.forEach((j) => (j.visible = false))
+    this.rightHandJoints.forEach((j) => (j.visible = false))
+    this.leftHandBones.forEach((b) => (b.line.visible = false))
+    this.rightHandBones.forEach((b) => (b.line.visible = false))
+  }
+
+  private updateHand(
+    points: number[][],
+    joints: THREE.Mesh[],
+    bones: BoneConnection[],
+    offsetX: number
+  ): boolean {
+    if (!points || !Array.isArray(points) || points.length !== 21) {
+      joints.forEach((j) => (j.visible = false))
+      bones.forEach((b) => (b.line.visible = false))
       return false
     }
 
+    // Check if hand is present (has non-zero points)
+    const isPresent = points.some(
+      (p) =>
+        p &&
+        Array.isArray(p) &&
+        p.length >= 3 &&
+        !isNaN(p[0]) &&
+        (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+    )
+
+    if (!isPresent) {
+      joints.forEach((j) => (j.visible = false))
+      bones.forEach((b) => (b.line.visible = false))
+      return false
+    }
+
+    // Data is NOT normalized (0-1), it's in range approximately -3 to +3
+    // Scale down and position appropriately
+    const scale = 0.3  // Scale down the coordinates
+    const zScale = 0.2
+
+    // Update joints
+    for (let i = 0; i < 21; i++) {
+      const p = points[i]
+      const j = joints[i]
+
+      if (
+        !p ||
+        !Array.isArray(p) ||
+        p.length < 3 ||
+        (p[0] === 0 && p[1] === 0 && p[2] === 0)
+      ) {
+        j.visible = false
+        continue
+      }
+
+      // Data is already centered around 0, just scale and offset
+      j.position.set(
+        p[0] * scale + offsetX,
+        -p[1] * scale,  // Flip Y axis
+        -p[2] * zScale
+      )
+      j.visible = true
+    }
+
+    // Update bones
+    bones.forEach((b) => {
+      const jStart = joints[b.start]
+      const jEnd = joints[b.end]
+
+      if (!jStart.visible || !jEnd.visible) {
+        b.line.visible = false
+        return
+      }
+
+      const pStart = jStart.position
+      const pEnd = jEnd.position
+      const positions = (b.line.geometry as THREE.BufferGeometry).attributes
+        .position.array as Float32Array
+
+      positions[0] = pStart.x
+      positions[1] = pStart.y
+      positions[2] = pStart.z
+      positions[3] = pEnd.x
+      positions[4] = pEnd.y
+      positions[5] = pEnd.z
+
+      ;(b.line.geometry as THREE.BufferGeometry).attributes.position.needsUpdate = true
+      b.line.visible = true
+    })
+
+    return true
+  }
+
+  updateFrame(frame: PoseFrame | null): boolean {
+    if (!frame) {
+      this.hideAllPose()
+      this.hideAllHands()
+      return false
+    }
+
+    // Check if this is hand data
+    if (frame.left_hand || frame.right_hand) {
+      this.hideAllPose() // Hide pose when showing hands
+      
+      let hasValidData = false
+      
+      // Update left hand (offset to the left)
+      if (frame.left_hand) {
+        const valid = this.updateHand(frame.left_hand, this.leftHandJoints, this.leftHandBones, -0.5)
+        if (valid) hasValidData = true
+      } else {
+        this.leftHandJoints.forEach((j) => (j.visible = false))
+        this.leftHandBones.forEach((b) => (b.line.visible = false))
+      }
+      
+      // Update right hand (offset to the right)
+      if (frame.right_hand) {
+        const valid = this.updateHand(frame.right_hand, this.rightHandJoints, this.rightHandBones, 0.5)
+        if (valid) hasValidData = true
+      } else {
+        this.rightHandJoints.forEach((j) => (j.visible = false))
+        this.rightHandBones.forEach((b) => (b.line.visible = false))
+      }
+      
+      return hasValidData
+    }
+
+    // Handle pose data (original logic)
+    this.hideAllHands() // Hide hands when showing pose
+    
     const points = frame.pose
     if (!points || !Array.isArray(points) || points.length !== 33) {
-      this.joints.forEach((j) => (j.visible = false))
-      this.bones.forEach((b) => (b.line.visible = false))
+      this.hideAllPose()
       return false
     }
 
@@ -150,8 +350,7 @@ export class AvatarController {
     )
 
     if (!isPresent) {
-      this.joints.forEach((j) => (j.visible = false))
-      this.bones.forEach((b) => (b.line.visible = false))
+      this.hideAllPose()
       return false
     }
 
@@ -212,6 +411,42 @@ export class AvatarController {
     return true
   }
 
+  private checkFrameHasData(frame: PoseFrame): boolean {
+    // Check for hand data
+    if (frame.left_hand || frame.right_hand) {
+      const checkHand = (points: number[][] | undefined) => {
+        return points &&
+          Array.isArray(points) &&
+          points.length === 21 &&
+          points.some(
+            (p) =>
+              p &&
+              Array.isArray(p) &&
+              p.length >= 3 &&
+              !isNaN(p[0]) &&
+              (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+          )
+      }
+      return !!(checkHand(frame.left_hand) || checkHand(frame.right_hand))
+    }
+    
+    // Check for pose data
+    const points = frame?.pose
+    return !!(
+      points &&
+      Array.isArray(points) &&
+      points.length === 33 &&
+      points.some(
+        (p) =>
+          p &&
+          Array.isArray(p) &&
+          p.length >= 3 &&
+          !isNaN(p[0]) &&
+          (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
+      )
+    )
+  }
+
   async playSequence(frames: PoseFrame[], fps = 30): Promise<boolean> {
     if (!frames || frames.length === 0) {
       return false
@@ -227,20 +462,7 @@ export class AvatarController {
     let earlyBlankCount = 0
     for (let i = 0; i < Math.min(earlyCheckFrames, frames.length); i++) {
       const frame = frames[i]
-      const points = frame?.pose
-      const isPresent =
-        points &&
-        Array.isArray(points) &&
-        points.length === 33 &&
-        points.some(
-          (p) =>
-            p &&
-            Array.isArray(p) &&
-            p.length >= 3 &&
-            !isNaN(p[0]) &&
-            (p[0] !== 0 || p[1] !== 0 || p[2] !== 0)
-        )
-      if (!isPresent) {
+      if (!this.checkFrameHasData(frame)) {
         earlyBlankCount++
       }
     }
@@ -277,13 +499,34 @@ export class AvatarController {
       cancelAnimationFrame(this.animationFrameId)
     }
 
-    // Clean up Three.js resources
+    // Clean up Three.js resources - Pose
     this.joints.forEach((j) => {
       j.geometry.dispose()
       ;(j.material as THREE.Material).dispose()
     })
 
     this.bones.forEach((b) => {
+      b.line.geometry.dispose()
+      ;(b.line.material as THREE.Material).dispose()
+    })
+
+    // Clean up Three.js resources - Hands
+    this.leftHandJoints.forEach((j) => {
+      j.geometry.dispose()
+      ;(j.material as THREE.Material).dispose()
+    })
+
+    this.rightHandJoints.forEach((j) => {
+      j.geometry.dispose()
+      ;(j.material as THREE.Material).dispose()
+    })
+
+    this.leftHandBones.forEach((b) => {
+      b.line.geometry.dispose()
+      ;(b.line.material as THREE.Material).dispose()
+    })
+
+    this.rightHandBones.forEach((b) => {
       b.line.geometry.dispose()
       ;(b.line.material as THREE.Material).dispose()
     })

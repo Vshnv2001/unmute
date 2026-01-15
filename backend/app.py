@@ -88,6 +88,12 @@ def get_landmarks(sign_name: str):
     hand_data = sign_mgr.get_sign_frames(sign_name)
     pose_data = sign_mgr.get_sign_pose_frames(sign_name)
     
+    # Save hand data to hand.txt and pose data to pose.txt
+    with open("hand.txt", "w") as f:
+        json.dump(hand_data, f)
+    with open("pose.txt", "w") as f:
+        json.dump(pose_data, f)
+    
     if not hand_data and not pose_data:
         raise HTTPException(status_code=404, detail="Sign data not found")
     
@@ -109,6 +115,9 @@ def get_landmarks(sign_name: str):
     else:
         response["pose_frames"] = None
     
+    # Print response to resp.txt
+    with open("resp.txt", "w") as f:
+        json.dump(response, f)
     return response
 
 

@@ -22,12 +22,20 @@ export interface TranslationResult {
 
 export interface LandmarksData {
   pose_frames?: PoseFrame[]
-  hand_frames?: PoseFrame[]
+  hand_frames?: HandFrame[]
   frames?: PoseFrame[]
+  format?: "pose" | "hands"
 }
 
 export interface PoseFrame {
   pose?: number[][]
+  left_hand?: number[][]
+  right_hand?: number[][]
+}
+
+export interface HandFrame {
+  left?: number[][]
+  right?: number[][]
 }
 
 export function useTranslation() {
