@@ -11,6 +11,7 @@ from backend.vocab import vocab
 from backend.gemini_client import GeminiClient
 from backend.planner import build_render_plan
 from backend.sign_seq import SignSequenceManager
+from backend.gcs_storage import USE_GCS, get_dataset_info
 
 app = FastAPI()
 
@@ -23,14 +24,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Static Directories for sign language assets only
+# Mount Static Directories for sign language assets only (when not using GCS)
+# When USE_GCS=true, assets are served directly from Google Cloud Storage
 DATASET_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_dataset")
 PROCESSED_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_processed")
 
-if os.path.exists(DATASET_PATH):
-    app.mount("/static/sgsl_dataset", StaticFiles(directory=DATASET_PATH), name="sgsl_dataset")
-if os.path.exists(PROCESSED_PATH):
-    app.mount("/static/sgsl_processed", StaticFiles(directory=PROCESSED_PATH), name="sgsl_processed")
+if not USE_GCS:
+    print("[App] Using local static file serving")
+    if os.path.exists(DATASET_PATH):
+        app.mount("/static/sgsl_dataset", StaticFiles(directory=DATASET_PATH), name="sgsl_dataset")
+    if os.path.exists(PROCESSED_PATH):
+        app.mount("/static/sgsl_processed", StaticFiles(directory=PROCESSED_PATH), name="sgsl_processed")
+else:
+    print(f"[App] Using GCS for static files: {get_dataset_info()['public_url']}")
 
 
 
@@ -57,9 +63,11 @@ class TranslateResponse(BaseModel):
 
 @app.get("/health")
 def health():
+    storage_info = get_dataset_info()
     return {
         "status": "ok", 
         "vocab_size": len(vocab.get_allowed_tokens()),
+        "storage": storage_info,
     }
 
 @app.post("/api/translate", response_model=TranslateResponse)

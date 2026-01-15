@@ -2,12 +2,17 @@ import json
 import os
 from typing import Dict, List, Optional, Set
 
+from backend.gcs_storage import read_json, USE_GCS
+
 # Paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # Assuming sgsl_processed is at the project root, one level up from backend
 PROJECT_ROOT = os.path.dirname(current_dir)
 VOCAB_PATH = os.path.join(PROJECT_ROOT, "sgsl_processed", "vocab.json")
 ALIASES_PATH = os.path.join(current_dir, "aliases.json")
+
+# GCS path for vocab
+GCS_VOCAB_PATH = "sgsl_processed/vocab.json"
 
 class VocabLoader:
     _instance = None
@@ -29,22 +34,30 @@ class VocabLoader:
         self._load_data()
 
     def _load_data(self):
-        # Load Vocab
-        if os.path.exists(VOCAB_PATH):
+        # Load Vocab (from GCS or local)
+        data = None
+        if USE_GCS:
+            print(f"[Vocab] Loading from GCS: {GCS_VOCAB_PATH}")
+            data = read_json(GCS_VOCAB_PATH)
+        elif os.path.exists(VOCAB_PATH):
+            print(f"[Vocab] Loading from local: {VOCAB_PATH}")
             with open(VOCAB_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # vocab.json structure is expected to be { "token_to_sign": { ... } }
-                if "token_to_sign" in data:
-                    self.token_to_sign = data["token_to_sign"]
-                else:
-                    # Fallback if the JSON is just the dict directly (though tasks.md implies deeper structure, verify_vocab showed token_to_sign key)
-                    self.token_to_sign = data
-                
-                # Build reverse map
-                self.sign_to_token = {v: k for k, v in self.token_to_sign.items()}
-                self.allowed_tokens_list = list(self.token_to_sign.keys())
+        
+        if data:
+            # vocab.json structure is expected to be { "token_to_sign": { ... } }
+            if "token_to_sign" in data:
+                self.token_to_sign = data["token_to_sign"]
+            else:
+                # Fallback if the JSON is just the dict directly
+                self.token_to_sign = data
+            
+            # Build reverse map
+            self.sign_to_token = {v: k for k, v in self.token_to_sign.items()}
+            self.allowed_tokens_list = list(self.token_to_sign.keys())
+            print(f"[Vocab] Loaded {len(self.allowed_tokens_list)} tokens")
         else:
-            print(f"Warning: Vocab file not found at {VOCAB_PATH}")
+            print(f"Warning: Vocab file not found at {VOCAB_PATH} or GCS")
 
         # Load Aliases
         if os.path.exists(ALIASES_PATH):
