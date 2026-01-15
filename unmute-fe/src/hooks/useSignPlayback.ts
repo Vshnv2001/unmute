@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react"
-import type { PlanItem, LandmarksData } from "./useTranslation"
+import type { PlanItem, LandmarksData, HandFrame } from "./useTranslation"
 import type { AvatarController, PoseFrame } from "@/lib/avatar-controller"
 
 const API_BASE = "http://127.0.0.1:8000"
@@ -55,18 +55,33 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
 
     try {
       const data = await fetchLandmarks(item.sign_name)
+      console.log(`[Landmarks Response] ${item.sign_name}:`, data)
       
       // Get frames from various possible formats
       let frames: PoseFrame[] | null = null
+      
+      // Check for pose_frames (can be either full pose or hand data)
       if (data?.pose_frames && Array.isArray(data.pose_frames) && data.pose_frames.length > 0) {
         frames = data.pose_frames as PoseFrame[]
-        console.log(`Playing pose skeleton: ${item.token} (${frames.length} frames)`)
-      } else if (data?.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
-        frames = data.hand_frames as PoseFrame[]
-        console.log(`Playing hand skeleton: ${item.token} (${frames.length} frames)`)
-      } else if (data?.frames && Array.isArray(data.frames) && data.frames.length > 0) {
+        // Check if it's hand data (has left_hand/right_hand) or pose data (has pose)
+        const isHandData = frames[0] && ('left_hand' in frames[0] || 'right_hand' in frames[0])
+        console.log(`Playing ${isHandData ? 'hand' : 'pose'} skeleton: ${item.token} (${frames.length} frames)`)
+      } 
+      // Check for hand_frames (legacy format with left/right)
+      else if (data?.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
+        // Convert legacy hand_frames format to new format
+        frames = data.hand_frames.map((f: HandFrame) => ({
+          left_hand: f.left,
+          right_hand: f.right
+        })) as PoseFrame[]
+        console.log(`Playing hand skeleton (converted): ${item.token} (${frames.length} frames)`)
+      } 
+      // Check for frames (generic format)
+      else if (data?.frames && Array.isArray(data.frames) && data.frames.length > 0) {
         frames = data.frames as PoseFrame[]
         console.log(`Playing skeleton (legacy format): ${item.token} (${frames.length} frames)`)
+      } else {
+        console.log(`No frames found for ${item.token}`)
       }
 
       // Play skeleton animation (if available)

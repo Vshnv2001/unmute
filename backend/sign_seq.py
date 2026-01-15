@@ -40,18 +40,19 @@ class SignSequenceManager:
         X = data["X"]
         L, D = X.shape
         
+        # Filter out zero-padded frames - only keep frames with actual data
         frames_out = []
         for t in range(L):
             row = X[t]
+            
+            # Skip frames that are entirely zeros
+            if not np.any(row != 0):
+                continue
+                
             lh_flat = row[:63]
             rh_flat = row[63:]
             
             # Reshape (21, 3)
-            # We assume non-zero means present? Or just send all.
-            # Frontend can handle zeros.
-            
-            # To reduce JSON size, maybe round floats?
-            # 3 decimal places is enough for normalized coords?
             lh = np.round(lh_flat.reshape(21, 3), 4).tolist()
             rh = np.round(rh_flat.reshape(21, 3), 4).tolist()
             
@@ -59,6 +60,8 @@ class SignSequenceManager:
                 "left": lh,
                 "right": rh
             })
+        
+        print(f"[get_sign_frames] {sign_name}: {len(frames_out)} non-zero frames out of {L} total")
             
         return {
             "frames": frames_out,
@@ -94,57 +97,52 @@ class SignSequenceManager:
         L, D = X.shape
         print(f"Data shape: ({L}, {D})")
         
-        frames_out = []
-        
+        # Check data format based on dimension
         if D == 99:
-            # Pose data: 33 landmarks * 3 coordinates
+            # Full body pose data: 33 landmarks × 3 coordinates
+            frames_out = []
             for t in range(L):
                 row = X[t]
                 pose = np.round(row.reshape(33, 3), 4).tolist()
                 frames_out.append({"pose": pose})
+            
+            return {
+                "frames": frames_out,
+                "L_orig": data.get("L_orig", L),
+                "L_max": data.get("L_max", L)
+            }
         elif D == 126:
-            # Hand data: 2 hands * 21 landmarks * 3 coordinates
-            # Convert to pose-like format: create 33 "landmarks" 
-            # where we map hands to approximate body positions
+            # Hand-only data: 21 landmarks × 3 coordinates × 2 hands
+            # Convert to a format with left and right hand landmarks
+            print(f"Converting hand data (126 elements) to pose format")
+            frames_out = []
             for t in range(L):
                 row = X[t]
-                lh_flat = row[:63]  # Left hand
-                rh_flat = row[63:]  # Right hand
                 
-                lh = np.round(lh_flat.reshape(21, 3), 4)
-                rh = np.round(rh_flat.reshape(21, 3), 4)
+                # Skip frames that are entirely zeros (padding)
+                if not np.any(row != 0):
+                    continue
                 
-                # Create a 33-landmark "pose" array
-                # Map hands to approximate shoulder/arm positions
-                # Landmarks 0-10: face (fill with zeros or center)
-                # Landmarks 11-16: arms (use hand wrist as reference)
-                # Landmarks 17-22: hands left (use left hand landmarks)
-                # Landmarks 23-32: lower body (fill with zeros)
+                lh_flat = row[:63]
+                rh_flat = row[63:]
                 
-                pose = np.zeros((33, 3))
+                # Reshape to (21, 3) for each hand
+                lh = np.round(lh_flat.reshape(21, 3), 4).tolist()
+                rh = np.round(rh_flat.reshape(21, 3), 4).tolist()
                 
-                # Use wrist (landmark 0) as arm endpoint
-                if np.any(lh[0] != 0):
-                    pose[15] = lh[0]  # Left wrist
-                    pose[13] = lh[0] + [0, -0.1, 0]  # Left elbow (approximate)
-                    pose[11] = lh[0] + [0.1, -0.2, 0]  # Left shoulder (approximate)
-                    
-                if np.any(rh[0] != 0):
-                    pose[16] = rh[0]  # Right wrist
-                    pose[14] = rh[0] + [0, -0.1, 0]  # Right elbow (approximate)
-                    pose[12] = rh[0] + [-0.1, -0.2, 0]  # Right shoulder (approximate)
-                
-                # Add some hand finger tips for visibility
-                pose[17:21] = lh[4:8]  # Left fingertips
-                pose[21:25] = rh[4:8]  # Right fingertips
-                
-                frames_out.append({"pose": np.round(pose, 4).tolist()})
-        else:
-            print(f"Unknown data shape: {D}")
-            return None
+                frames_out.append({
+                    "left_hand": lh,
+                    "right_hand": rh
+                })
             
-        return {
-            "frames": frames_out,
-            "L_orig": data.get("L_orig", L),
-            "L_max": data.get("L_max", L)
-        }
+            print(f"[get_sign_pose_frames] {sign_name}: {len(frames_out)} non-zero frames out of {L} total")
+            
+            return {
+                "frames": frames_out,
+                "L_orig": data.get("L_orig", L),
+                "L_max": data.get("L_max", L),
+                "format": "hands"  # Indicate this is hand data
+            }
+        else:
+            print(f"Unknown data format with {D} elements")
+            return None
