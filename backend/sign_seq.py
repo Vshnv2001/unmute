@@ -40,15 +40,38 @@ class SignSequenceManager:
         X = data["X"]
         L, D = X.shape
         
-        # Filter out zero-padded frames - only keep frames with actual data
-        frames_out = []
+        # Filter out zero-padded frames first
+        non_zero_frames = []
         for t in range(L):
             row = X[t]
+            if np.any(row != 0):
+                non_zero_frames.append(row)
+        
+        if len(non_zero_frames) == 0:
+            print(f"[get_sign_frames] {sign_name}: No non-zero frames found")
+            return None
+        
+        # Stack into array for normalization
+        X_filtered = np.array(non_zero_frames)
+        
+        # Normalize to 0-1 range
+        # Find global min/max across all non-zero values
+        X_nonzero = X_filtered[X_filtered != 0]
+        if len(X_nonzero) > 0:
+            x_min = X_nonzero.min()
+            x_max = X_nonzero.max()
+            print(f"[get_sign_frames] {sign_name}: Data range [{x_min:.4f}, {x_max:.4f}]")
             
-            # Skip frames that are entirely zeros
-            if not np.any(row != 0):
-                continue
-                
+            # Normalize: (x - min) / (max - min)
+            X_normalized = np.zeros_like(X_filtered)
+            mask = X_filtered != 0
+            X_normalized[mask] = (X_filtered[mask] - x_min) / (x_max - x_min)
+        else:
+            X_normalized = X_filtered
+        
+        # Convert to frames
+        frames_out = []
+        for row in X_normalized:
             lh_flat = row[:63]
             rh_flat = row[63:]
             
@@ -115,14 +138,38 @@ class SignSequenceManager:
             # Hand-only data: 21 landmarks × 3 coordinates × 2 hands
             # Convert to a format with left and right hand landmarks
             print(f"Converting hand data (126 elements) to pose format")
-            frames_out = []
+            
+            # Filter out zero-padded frames first
+            non_zero_frames = []
             for t in range(L):
                 row = X[t]
+                if np.any(row != 0):
+                    non_zero_frames.append(row)
+            
+            if len(non_zero_frames) == 0:
+                print(f"[get_sign_pose_frames] {sign_name}: No non-zero frames found")
+                return None
+            
+            # Stack into array for normalization
+            X_filtered = np.array(non_zero_frames)
+            
+            # Normalize to 0-1 range
+            X_nonzero = X_filtered[X_filtered != 0]
+            if len(X_nonzero) > 0:
+                x_min = X_nonzero.min()
+                x_max = X_nonzero.max()
+                print(f"[get_sign_pose_frames] {sign_name}: Data range [{x_min:.4f}, {x_max:.4f}]")
                 
-                # Skip frames that are entirely zeros (padding)
-                if not np.any(row != 0):
-                    continue
-                
+                # Normalize: (x - min) / (max - min)
+                X_normalized = np.zeros_like(X_filtered)
+                mask = X_filtered != 0
+                X_normalized[mask] = (X_filtered[mask] - x_min) / (x_max - x_min)
+            else:
+                X_normalized = X_filtered
+            
+            # Convert to frames
+            frames_out = []
+            for row in X_normalized:
                 lh_flat = row[:63]
                 rh_flat = row[63:]
                 

@@ -238,10 +238,10 @@ export class AvatarController {
       return false
     }
 
-    // Data is NOT normalized (0-1), it's in range approximately -3 to +3
-    // Scale down and position appropriately
-    const scale = 0.3  // Scale down the coordinates
-    const zScale = 0.2
+    // Data is normalized to 0-1 range
+    // Center it by subtracting 0.5, then scale for visibility
+    const scale = 2.0  // Scale factor for visibility
+    const zScale = 0.5 // Z depth scale
 
     // Update joints
     for (let i = 0; i < 21; i++) {
@@ -258,11 +258,11 @@ export class AvatarController {
         continue
       }
 
-      // Data is already centered around 0, just scale and offset
+      // Normalize from [0,1] to [-0.5, 0.5] by subtracting 0.5, then scale
       j.position.set(
-        p[0] * scale + offsetX,
-        -p[1] * scale,  // Flip Y axis
-        -p[2] * zScale
+        (p[0] - 0.5) * scale + offsetX,
+        -(p[1] - 0.5) * scale,  // Flip Y axis for correct orientation
+        -(p[2] - 0.5) * zScale
       )
       j.visible = true
     }
