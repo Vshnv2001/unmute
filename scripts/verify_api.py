@@ -1,8 +1,10 @@
 import requests
 import json
 import sys
+import os
 
-BASE_URL = "http://127.0.0.1:8000"
+# Get BASE_URL from environment variable or use default
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 def test_health():
     print(f"Testing {BASE_URL}/health...")
@@ -30,6 +32,9 @@ def test_translate(text="I want apple"):
         sys.exit(1)
 
 if __name__ == "__main__":
+    print(f"Using API Base URL: {BASE_URL}")
+    print(f"(Override with API_BASE_URL environment variable)\n")
+    
     if len(sys.argv) > 1 and sys.argv[1] == "health":
         test_health()
     else:
