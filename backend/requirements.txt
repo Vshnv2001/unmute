@@ -81,3 +81,4 @@ uritemplate==4.2.0
 urllib3==2.4.0
 uvicorn==0.40.0
 websockets==15.0.1
+google-cloud-storage==2.18.2

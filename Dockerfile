@@ -21,7 +21,12 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend code
 COPY backend/ /app/backend/
 
-# # Copy dataset and processed files
+# NOTE: For production, datasets are stored in Google Cloud Storage
+# Set these environment variables:
+#   USE_GCS=true
+#   GCS_BUCKET_NAME=your-bucket-name
+#
+# For local development with bundled datasets, uncomment the lines below:
 # COPY sgsl_dataset/ /app/sgsl_dataset/
 # COPY sgsl_processed/ /app/sgsl_processed/
 
@@ -31,6 +36,10 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+
+# GCS configuration (override these in Cloud Run or docker-compose)
+ENV USE_GCS=false
+ENV GCS_BUCKET_NAME=unmute-datasets
 
 # Run the application
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

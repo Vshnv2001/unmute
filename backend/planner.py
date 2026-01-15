@@ -9,6 +9,9 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 from backend.vocab import vocab
+from backend.gcs_storage import get_static_url, USE_GCS
+
+
 def build_render_plan(gloss_tokens: List[str]) -> List[Dict[str, Any]]:
     """
     Convert a list of gloss tokens into a rendering plan with asset URLs.
@@ -30,15 +33,13 @@ def build_render_plan(gloss_tokens: List[str]) -> List[Dict[str, Any]]:
         if sign_name:
             item["sign_name"] = sign_name
             item["type"] = "sign"
-            # Construct paths
-            # Assuming the web server mounts the root or specific folders to /static
-            # Adjust these prefixes based on your actual Flask/FastAPI static mount configuration
+            # Construct paths using GCS or local static paths
             
             # GIF: sgsl_dataset/{sign_name}/{sign_name}.gif
-            item["assets"]["gif"] = f"/static/sgsl_dataset/{sign_name}/{sign_name}.gif"
+            item["assets"]["gif"] = get_static_url(f"sgsl_dataset/{sign_name}/{sign_name}.gif")
             
             # PKL: sgsl_processed/landmarks_pkl/{sign_name}.pkl
-            item["assets"]["pkl"] = f"/static/sgsl_processed/landmarks_pkl/{sign_name}.pkl"
+            item["assets"]["pkl"] = get_static_url(f"sgsl_processed/landmarks_pkl/{sign_name}.pkl")
             
         plan.append(item)
         

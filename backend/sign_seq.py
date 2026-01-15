@@ -2,6 +2,11 @@ import os
 import pickle
 import numpy as np
 
+from backend.gcs_storage import read_pickle, USE_GCS
+
+# GCS path prefix for pickle files
+GCS_PKL_PREFIX = "sgsl_processed/landmarks_pkl"
+
 class SignSequenceManager:
     def __init__(self, pkl_dir: str = None):
         if pkl_dir is None:
@@ -10,7 +15,30 @@ class SignSequenceManager:
             parent_dir = os.path.dirname(current_dir)
             pkl_dir = os.path.join(parent_dir, "sgsl_processed", "landmarks_pkl")
         self.pkl_dir = pkl_dir
+        self.use_gcs = USE_GCS
         print(f"[SignSequenceManager] PKL directory: {self.pkl_dir}")
+        print(f"[SignSequenceManager] Using GCS: {self.use_gcs}")
+
+    def _load_pkl_data(self, sign_name: str):
+        """Load pickle data from GCS or local filesystem."""
+        if self.use_gcs:
+            gcs_path = f"{GCS_PKL_PREFIX}/{sign_name}.pkl"
+            print(f"[SignSequenceManager] Loading from GCS: {gcs_path}")
+            data = read_pickle(gcs_path)
+            if data is None:
+                print(f"[SignSequenceManager] Sign data not found in GCS for {sign_name}")
+            return data
+        else:
+            pkl_path = os.path.join(self.pkl_dir, f"{sign_name}.pkl")
+            print(f"PKL path: {pkl_path}")
+            print(f"PKL path exists: {os.path.exists(pkl_path)}")
+            if not os.path.exists(pkl_path):
+                print(f"Sign data not found for {sign_name}")
+                print(f"Checked path: {os.path.abspath(pkl_path)}")
+                return None
+            
+            with open(pkl_path, 'rb') as f:
+                return pickle.load(f)
 
     def get_sign_frames(self, sign_name: str):
         """
@@ -24,16 +52,9 @@ class SignSequenceManager:
             "L_max": int
         }
         """
-        pkl_path = os.path.join(self.pkl_dir, f"{sign_name}.pkl")
-        print(f"PKL path: {pkl_path}")
-        print(f"PKL path exists: {os.path.exists(pkl_path)}")
-        if not os.path.exists(pkl_path):
-            print(f"Sign data not found for {sign_name}")
-            print(f"Checked path: {os.path.abspath(pkl_path)}")
+        data = self._load_pkl_data(sign_name)
+        if data is None:
             return None
-            
-        with open(pkl_path, 'rb') as f:
-            data = pickle.load(f)
             
         # Data X is (L, 126). 
         # 0-62 = Left flattened. 63-125 = Right flattened.
@@ -105,16 +126,9 @@ class SignSequenceManager:
             "L_max": int
         }
         """
-        pkl_path = os.path.join(self.pkl_dir, f"{sign_name}.pkl")
-        print(f"Pose PKL path: {pkl_path}")
-        print(f"Pose PKL path exists: {os.path.exists(pkl_path)}")
-        if not os.path.exists(pkl_path):
-            print(f"Pose sign data not found for {sign_name}")
-            print(f"Checked path: {os.path.abspath(pkl_path)}")
+        data = self._load_pkl_data(sign_name)
+        if data is None:
             return None
-            
-        with open(pkl_path, 'rb') as f:
-            data = pickle.load(f)
             
         X = data["X"]
         L, D = X.shape

@@ -11,6 +11,9 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - API_BASE_URL=${API_BASE_URL}
+      # GCS configuration (set USE_GCS=true for production)
+      - USE_GCS=${USE_GCS}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
     env_file:
       - backend/.env
     volumes:
