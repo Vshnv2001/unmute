@@ -21,9 +21,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend code
 COPY backend/ /app/backend/
 
-# Copy dataset and processed files
-COPY sgsl_dataset/ /app/sgsl_dataset/
-COPY sgsl_processed/ /app/sgsl_processed/
+# # Copy dataset and processed files
+# COPY sgsl_dataset/ /app/sgsl_dataset/
+# COPY sgsl_processed/ /app/sgsl_processed/
 
 # Expose port
 EXPOSE 8000
