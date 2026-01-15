@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import type { TranslationResult } from "./useTranslation"
 
-const WS_BASE = "ws://127.0.0.1:8000"
+const WS_BASE = import.meta.env.VITE_WS_BASE_URL || "ws://127.0.0.1:8000"
 
 interface UseWebRTCOptions {
   roomId: string

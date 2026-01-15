@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: unmute-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - API_BASE_URL=${API_BASE_URL}
+    env_file:
+      - backend/.env
+    volumes:
+      # Mount backend code for hot reload during development
+      - ./backend:/app/backend
+      # Mount datasets
+      - ./sgsl_dataset:/app/sgsl_dataset:ro
+      - ./sgsl_processed:/app/sgsl_processed:ro
+    restart: unless-stopped
+    networks:
+      - unmute-network
+
+networks:
+  unmute-network:
+    driver: bridge
