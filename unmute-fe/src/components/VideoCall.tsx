@@ -7,6 +7,7 @@ import { useWebRTC } from "@/hooks/useWebRTC"
 import { useVoiceRecording } from "@/hooks/useVoiceRecording"
 import { useSignPlayback } from "@/hooks/useSignPlayback"
 import { AvatarViewer } from "@/components/AvatarViewer"
+import { GlossDisplay } from "@/components/GlossDisplay"
 import type { AvatarController } from "@/lib/avatar-controller"
 import type { TranslationResult } from "@/hooks/useTranslation"
 import { Video, VideoOff, Mic, MicOff, PhoneOff, Phone, Copy, Check, Languages, Play, Square, Loader2 } from "lucide-react"
@@ -423,6 +424,20 @@ export function VideoCall() {
                 </Badge>
               </div>
               <p className="text-sm text-[var(--text-primary)]">{transcribedText}</p>
+            </div>
+          )}
+
+          {/* Sign Sequence Display */}
+          {translationResult && translationResult.gloss && translationResult.gloss.length > 0 && (
+            <div className="p-3 rounded-lg border border-[var(--border-soft)] bg-[var(--bg-card)]">
+              <div className="text-xs font-semibold tracking-[0.1em] uppercase text-[var(--text-muted)] mb-2">
+                Sign Sequence
+              </div>
+              <GlossDisplay 
+                gloss={translationResult.gloss} 
+                activeToken={currentToken}
+                unmatched={translationResult.unmatched || []}
+              />
             </div>
           )}
 
