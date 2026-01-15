@@ -38,7 +38,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # GCS configuration (override these in Cloud Run or docker-compose)
-ENV USE_GCS=false
+ENV USE_GCS=true
 ENV GCS_BUCKET_NAME=unmute-datasets
 
 # Run the application
