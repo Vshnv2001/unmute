@@ -292,6 +292,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             elif msg_type == "chat":
                 # Optional: relay chat messages
                 await manager.relay_message(websocket, data)
+            elif msg_type == "sign-translation":
+                # Relay sign language translation to all other users in room
+                print(f"[WebRTC] Relaying sign translation from {user_id}")
+                await manager.relay_message(websocket, data)
     
     except WebSocketDisconnect:
         print(f"[WebRTC] User {user_id} disconnected from room {room_id}")

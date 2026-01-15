@@ -1,13 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from "react"
+import type { TranslationResult } from "./useTranslation"
 
 const WS_BASE = "ws://127.0.0.1:8000"
 
 interface UseWebRTCOptions {
   roomId: string
   userId: string
+  onRemoteTranslation?: (result: TranslationResult, senderName: string) => void
 }
 
-export function useWebRTC({ roomId, userId }: UseWebRTCOptions) {
+export function useWebRTC({ roomId, userId, onRemoteTranslation }: UseWebRTCOptions) {
   const [isConnected, setIsConnected] = useState(false)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
@@ -17,6 +19,12 @@ export function useWebRTC({ roomId, userId }: UseWebRTCOptions) {
   const wsRef = useRef<WebSocket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
+  const onRemoteTranslationRef = useRef(onRemoteTranslation)
+  
+  // Keep ref updated
+  useEffect(() => {
+    onRemoteTranslationRef.current = onRemoteTranslation
+  }, [onRemoteTranslation])
 
   const createPeerConnection = useCallback(() => {
     const config: RTCConfiguration = {
@@ -178,6 +186,14 @@ export function useWebRTC({ roomId, userId }: UseWebRTCOptions) {
             }
           }
           break
+
+        case "sign-translation":
+          // Received sign language translation from remote peer
+          console.log("[WebRTC] Received sign translation from:", data.sender_id)
+          if (data.translation && onRemoteTranslationRef.current) {
+            onRemoteTranslationRef.current(data.translation as TranslationResult, data.sender_id)
+          }
+          break
       }
     }
 
@@ -233,6 +249,18 @@ export function useWebRTC({ roomId, userId }: UseWebRTCOptions) {
     }
   }, [])
 
+  const sendTranslation = useCallback((translation: TranslationResult) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log("[WebRTC] Sending sign translation to room")
+      wsRef.current.send(JSON.stringify({
+        type: "sign-translation",
+        translation,
+      }))
+    } else {
+      console.warn("[WebRTC] Cannot send translation - WebSocket not open")
+    }
+  }, [])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -250,5 +278,6 @@ export function useWebRTC({ roomId, userId }: UseWebRTCOptions) {
     disconnect,
     toggleVideo,
     toggleAudio,
+    sendTranslation,
   }
 }

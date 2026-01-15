@@ -21,10 +21,30 @@ export function VideoCall() {
   const [avatar, setAvatar] = useState<AvatarController | null>(null)
   const [translationResult, setTranslationResult] = useState<TranslationResult | null>(null)
   const [transcribedText, setTranscribedText] = useState<string>("")
+  const [translationSource, setTranslationSource] = useState<"local" | "remote">("local")
+  const [remoteSender, setRemoteSender] = useState<string>("")
   
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  
+  const sendTranslationRef = useRef<((translation: TranslationResult) => void) | null>(null)
+
+  const { isPlaying, currentToken, currentGifUrl, playSequence, stopPlayback } = useSignPlayback({ avatar })
+
+  // Handle receiving translation from remote peer
+  const handleRemoteTranslation = useCallback((result: TranslationResult, senderName: string) => {
+    console.log("[VideoCall] Received remote translation from:", senderName)
+    stopPlayback()
+    setTranslationResult(result)
+    setTranslationSource("remote")
+    setRemoteSender(senderName)
+    if (result.transcription) {
+      setTranscribedText(result.transcription)
+    }
+    if (result.plan.length > 0) {
+      playSequence(result.plan)
+    }
+  }, [stopPlayback, playSequence])
+
   const { 
     isConnected, 
     localStream, 
@@ -35,18 +55,28 @@ export function VideoCall() {
     disconnect,
     toggleVideo,
     toggleAudio,
-  } = useWebRTC({ roomId, userId })
+    sendTranslation,
+  } = useWebRTC({ roomId, userId, onRemoteTranslation: handleRemoteTranslation })
 
-  const { isPlaying, currentToken, currentGifUrl, playSequence, stopPlayback } = useSignPlayback({ avatar })
+  // Keep ref updated for use in voice result handler
+  useEffect(() => {
+    sendTranslationRef.current = sendTranslation
+  }, [sendTranslation])
 
   const handleVoiceResult = useCallback((result: TranslationResult) => {
     stopPlayback()
     setTranslationResult(result)
+    setTranslationSource("local")
+    setRemoteSender("")
     if (result.transcription) {
       setTranscribedText(result.transcription)
     }
     if (result.plan.length > 0) {
       playSequence(result.plan)
+    }
+    // Send translation to remote peer
+    if (sendTranslationRef.current) {
+      sendTranslationRef.current(result)
     }
   }, [stopPlayback, playSequence])
 
@@ -323,11 +353,21 @@ export function VideoCall() {
               <Languages className="w-5 h-5 text-[var(--accent-terracotta)]" />
               <h3 className="font-semibold text-[var(--text-primary)]">Sign Language</h3>
             </div>
-            {isPlaying && (
-              <Badge variant="accent" className="text-xs">
-                Playing
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {translationResult && (
+                <Badge 
+                  variant={translationSource === "remote" ? "default" : "accent"} 
+                  className={`text-xs ${translationSource === "remote" ? "bg-blue-500" : ""}`}
+                >
+                  {translationSource === "remote" ? "Remote" : "Local"}
+                </Badge>
+              )}
+              {isPlaying && (
+                <Badge variant="accent" className="text-xs">
+                  Playing
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Transcribe Button */}
@@ -368,8 +408,20 @@ export function VideoCall() {
 
           {/* Transcribed Text */}
           {transcribedText && (
-            <div className="p-3 bg-[var(--bg-cream)] rounded-lg border border-[var(--border-soft)]">
-              <p className="text-xs text-[var(--text-muted)] mb-1">Transcribed:</p>
+            <div className={`p-3 rounded-lg border ${
+              translationSource === "remote" 
+                ? "bg-blue-50 border-blue-200" 
+                : "bg-[var(--bg-cream)] border-[var(--border-soft)]"
+            }`}>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-[var(--text-muted)]">Transcribed:</p>
+                <Badge 
+                  variant={translationSource === "remote" ? "default" : "accent"} 
+                  className={`text-[0.6rem] ${translationSource === "remote" ? "bg-blue-500" : ""}`}
+                >
+                  {translationSource === "remote" ? `From: ${remoteSender.slice(-4)}` : "You"}
+                </Badge>
+              </div>
               <p className="text-sm text-[var(--text-primary)]">{transcribedText}</p>
             </div>
           )}
