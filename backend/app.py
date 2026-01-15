@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 import os
 import asyncio
+import json
 
 from backend.vocab import vocab
 from backend.gemini_client import GeminiClient
@@ -22,11 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Static Directories
-# Mount sgsl_dataset to /static/sgsl_dataset
+# Mount Static Directories for sign language assets only
 DATASET_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_dataset")
 PROCESSED_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sgsl_processed")
-FRONTEND_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 
 if os.path.exists(DATASET_PATH):
     app.mount("/static/sgsl_dataset", StaticFiles(directory=DATASET_PATH), name="sgsl_dataset")
@@ -184,9 +183,119 @@ async def transcribe_audio(req: TranscribeRequest):
     }
 
 
-# Mount frontend LAST (so it doesn't override API routes)
-# This serves the frontend at http://127.0.0.1:8000/
-if os.path.exists(FRONTEND_PATH):
-    app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
+# Frontend is now served separately via Vite dev server (unmute-fe)
 
 
+# ============ WebRTC Signaling Server ============
+
+class ConnectionManager:
+    """Manages WebSocket connections and rooms for WebRTC signaling."""
+    
+    def __init__(self):
+        # room_id -> set of WebSocket connections
+        self.rooms: Dict[str, Set[WebSocket]] = {}
+        # websocket -> (room_id, user_id)
+        self.connections: Dict[WebSocket, tuple] = {}
+    
+    async def join_room(self, websocket: WebSocket, room_id: str, user_id: str):
+        await websocket.accept()
+        
+        if room_id not in self.rooms:
+            self.rooms[room_id] = set()
+        
+        self.rooms[room_id].add(websocket)
+        self.connections[websocket] = (room_id, user_id)
+        
+        # Notify others in the room
+        await self.broadcast_to_room(room_id, {
+            "type": "user_joined",
+            "user_id": user_id,
+            "room_id": room_id,
+            "user_count": len(self.rooms[room_id])
+        }, exclude=websocket)
+        
+        # Send current users to the new joiner
+        await websocket.send_json({
+            "type": "room_info",
+            "room_id": room_id,
+            "user_count": len(self.rooms[room_id])
+        })
+    
+    async def leave_room(self, websocket: WebSocket):
+        if websocket not in self.connections:
+            return
+        
+        room_id, user_id = self.connections[websocket]
+        
+        if room_id in self.rooms:
+            self.rooms[room_id].discard(websocket)
+            if not self.rooms[room_id]:
+                del self.rooms[room_id]
+            else:
+                await self.broadcast_to_room(room_id, {
+                    "type": "user_left",
+                    "user_id": user_id,
+                    "room_id": room_id
+                })
+        
+        del self.connections[websocket]
+    
+    async def broadcast_to_room(self, room_id: str, message: dict, exclude: WebSocket = None):
+        if room_id not in self.rooms:
+            return
+        
+        for connection in self.rooms[room_id]:
+            if connection != exclude:
+                try:
+                    await connection.send_json(message)
+                except:
+                    pass
+    
+    async def relay_message(self, websocket: WebSocket, message: dict):
+        """Relay signaling messages (offer, answer, ice-candidate) to peers."""
+        if websocket not in self.connections:
+            return
+        
+        room_id, sender_id = self.connections[websocket]
+        message["sender_id"] = sender_id
+        
+        # If target_id specified, send only to that user
+        target_id = message.get("target_id")
+        if target_id:
+            for conn, (r_id, u_id) in self.connections.items():
+                if r_id == room_id and u_id == target_id:
+                    await conn.send_json(message)
+                    return
+        
+        # Otherwise broadcast to all in room
+        await self.broadcast_to_room(room_id, message, exclude=websocket)
+
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/room/{room_id}/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str):
+    """WebSocket endpoint for WebRTC signaling."""
+    print(f"[WebRTC] User {user_id} joining room {room_id}")
+    await manager.join_room(websocket, room_id, user_id)
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            print(f"[WebRTC] Received {msg_type} from {user_id}")
+            
+            if msg_type in ["offer", "answer", "ice-candidate"]:
+                # Relay WebRTC signaling messages
+                await manager.relay_message(websocket, data)
+            elif msg_type == "chat":
+                # Optional: relay chat messages
+                await manager.relay_message(websocket, data)
+    
+    except WebSocketDisconnect:
+        print(f"[WebRTC] User {user_id} disconnected from room {room_id}")
+        await manager.leave_room(websocket)
+    except Exception as e:
+        print(f"[WebRTC] WebSocket error: {e}")
+        await manager.leave_room(websocket)

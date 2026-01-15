@@ -5,7 +5,6 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.vocab import vocab
-
 def run_tests():
     print("Running Vocabulary Tests...")
     

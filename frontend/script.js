@@ -5,8 +5,6 @@ const LANDMARKS_URL = "http://127.0.0.1:8000/api/sign";
 const TRANSCRIBE_API_URL = "http://127.0.0.1:8000/api/transcribe";
 
 // DOM Elements
-const inputText = document.getElementById('inputText');
-const translateBtn = document.getElementById('translateBtn');
 const outputSection = document.getElementById('outputSection');
 const outputSectionRight = document.getElementById('outputSectionRight');
 const glossDisplay = document.getElementById('glossDisplay');
@@ -19,16 +17,27 @@ const playerLabel = document.getElementById('playerLabel');
 // Initialize 3D Avatar
 const avatar = new AvatarController('avatarContainer');
 
-// Voice mode elements
-const textModeTab = document.getElementById('textModeTab');
+// Mode switching elements
 const voiceModeTab = document.getElementById('voiceModeTab');
-const textInputSection = document.getElementById('textInputSection');
+const videoModeTab = document.getElementById('videoModeTab');
 const voiceInputSection = document.getElementById('voiceInputSection');
+const videoInputSection = document.getElementById('videoInputSection');
+
+// Voice mode elements
 const micBtn = document.getElementById('micBtn');
 const micIcon = document.getElementById('micIcon');
 const stopIcon = document.getElementById('stopIcon');
 const micStatus = document.getElementById('micStatus');
 const audioWave = document.getElementById('audioWave');
+
+// Video mode elements
+const myPeerIdDisplay = document.getElementById('myPeerId');
+const remotePeerIdInput = document.getElementById('remotePeerId');
+const callBtn = document.getElementById('callBtn');
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const videoPlaceholder = document.getElementById('videoPlaceholder');
+const copyPeerIdBtn = document.getElementById('copyPeerId');
 
 // Transcription review elements
 const transcriptionReviewSection = document.getElementById('transcriptionReviewSection');
@@ -46,46 +55,113 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 
-// Mode switching
-textModeTab.addEventListener('click', () => {
-    textModeTab.classList.add('active');
-    textModeTab.classList.remove('text-slate-400');
-    voiceModeTab.classList.remove('active');
-    voiceModeTab.classList.add('text-slate-400');
-    textInputSection.classList.remove('hidden');
-    voiceInputSection.classList.add('hidden');
-});
+// PeerJS state
+let peer = null;
+let localStream = null;
+let currentCall = null;
 
+// Initialization
+initPeer();
+
+function initPeer() {
+    peer = new Peer({
+        host: '/',
+        port: 8000,
+        path: '/peerjs', // Note: This might need backend support if not using a public peer server
+        debug: 3
+    });
+
+    // Fallback to public server if local fails (simpler for demo)
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+        console.log('My peer ID is: ' + id);
+        myPeerIdDisplay.textContent = id;
+    });
+
+    peer.on('call', (call) => {
+        console.log('Receiving call...');
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then((stream) => {
+                localStream = stream;
+                localVideo.srcObject = stream;
+                call.answer(stream);
+                handleCall(call);
+            });
+    });
+
+    peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
+        alert('PeerJS error: ' + err.type);
+    });
+}
+
+function handleCall(call) {
+    currentCall = call;
+    call.on('stream', (remoteStream) => {
+        console.log('Received remote stream');
+        remoteVideo.srcObject = remoteStream;
+        videoPlaceholder.classList.add('hidden');
+    });
+    call.on('close', () => {
+        remoteVideo.srcObject = null;
+        videoPlaceholder.classList.remove('hidden');
+    });
+}
+
+// Mode switching
 voiceModeTab.addEventListener('click', () => {
     voiceModeTab.classList.add('active');
     voiceModeTab.classList.remove('text-slate-400');
-    textModeTab.classList.remove('active');
-    textModeTab.classList.add('text-slate-400');
+    videoModeTab.classList.remove('active');
+    videoModeTab.classList.add('text-slate-400');
     voiceInputSection.classList.remove('hidden');
-    textInputSection.classList.add('hidden');
+    videoInputSection.classList.add('hidden');
 });
 
-// Text translation
-translateBtn.addEventListener('click', async () => {
-    const text = inputText.value.trim();
-    if (!text) return;
+videoModeTab.addEventListener('click', async () => {
+    videoModeTab.classList.add('active');
+    videoModeTab.classList.remove('text-slate-400');
+    voiceModeTab.classList.remove('active');
+    voiceModeTab.classList.add('text-slate-400');
+    videoInputSection.classList.remove('hidden');
+    voiceInputSection.classList.add('hidden');
 
-    setLoading(true);
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
+    // Start local camera when switching to video mode
+    if (!localStream) {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+        } catch (err) {
+            console.error('Error accessing media devices.', err);
+            alert('Could not access camera/microphone.');
+        }
+    }
+});
+
+callBtn.addEventListener('click', () => {
+    const remoteId = remotePeerIdInput.value.trim();
+    if (!remoteId) {
+        alert('Please enter a remote Peer ID');
+        return;
+    }
+
+    console.log('Calling ' + remoteId + '...');
+    if (!localStream) {
+        alert('Local stream not ready. Please ensure camera access is granted.');
+        return;
+    }
+
+    const call = peer.call(remoteId, localStream);
+    handleCall(call);
+});
+
+copyPeerIdBtn.addEventListener('click', () => {
+    const id = myPeerIdDisplay.textContent;
+    if (id && id !== 'Initializing...') {
+        navigator.clipboard.writeText(id).then(() => {
+            alert('Peer ID copied to clipboard!');
         });
-
-        if (!res.ok) throw new Error("API Error");
-
-        const data = await res.json();
-        renderResult(data);
-    } catch (e) {
-        alert("Translation Failed: " + e.message);
-    } finally {
-        setLoading(false);
     }
 });
 
@@ -248,7 +324,7 @@ confirmTranscriptionBtn.addEventListener('click', async () => {
         if (!res.ok) throw new Error("Translation failed");
 
         const data = await res.json();
-        
+
         // Hide transcription review section after successful translation
         transcriptionReviewSection.classList.add('hidden');
         renderResult(data);
@@ -287,7 +363,6 @@ function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-            // Remove the data URL prefix (e.g., "data:audio/webm;base64,")
             const base64 = reader.result.split(',')[1];
             resolve(base64);
         };
