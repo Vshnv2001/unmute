@@ -99,7 +99,7 @@ function App() {
           />
         </main>
       ) : (
-        <main className="w-full max-w-4xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+        <main className="w-full max-w-6xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
           <VideoCall />
         </main>
       )}
