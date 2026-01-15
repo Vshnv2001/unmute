@@ -21,9 +21,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend code
 COPY backend/ /app/backend/
 
-# # Copy dataset and processed files
-# COPY sgsl_dataset/ /app/sgsl_dataset/
-# COPY sgsl_processed/ /app/sgsl_processed/
+# Copy dataset and processed files
+COPY sgsl_dataset/ /app/sgsl_dataset/
+COPY sgsl_processed/ /app/sgsl_processed/
 
 # Expose port
 EXPOSE 8000
@@ -31,10 +31,6 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
 
 # Run the application
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

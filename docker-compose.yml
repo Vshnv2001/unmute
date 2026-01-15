@@ -20,12 +20,6 @@ services:
       - ./sgsl_dataset:/app/sgsl_dataset:ro
       - ./sgsl_processed:/app/sgsl_processed:ro
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
       - unmute-network
 

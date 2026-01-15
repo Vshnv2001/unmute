@@ -35,7 +35,7 @@ EOF
 - `GEMINI_API_KEY` - Your Gemini API key (required)
 - `API_BASE_URL` - Base URL for API testing scripts (default: http://localhost:8000)
 
-### 2. Build and run with Docker Compose
+### 2a. Build and run with Docker Compose (Recommended)
 
 ```bash
 docker-compose up --build
@@ -43,10 +43,59 @@ docker-compose up --build
 
 The backend will be available at `http://localhost:8000`
 
+### 2b. Build and run with Docker directly (without docker-compose)
+
+**Build the image:**
+```bash
+docker build -t unmute-backend .
+```
+
+**Run the container:**
+```bash
+docker run -d \
+  --name unmute-backend \
+  -p 8000:8000 \
+  -e GEMINI_API_KEY=your_api_key_here \
+  -v "$(pwd)/backend:/app/backend" \
+  -v "$(pwd)/sgsl_dataset:/app/sgsl_dataset:ro" \
+  -v "$(pwd)/sgsl_processed:/app/sgsl_processed:ro" \
+  unmute-backend
+```
+
+**Or run interactively (see logs):**
+```bash
+docker run -it \
+  --name unmute-backend \
+  -p 8000:8000 \
+  -e GEMINI_API_KEY=your_api_key_here \
+  -v "$(pwd)/backend:/app/backend" \
+  -v "$(pwd)/sgsl_dataset:/app/sgsl_dataset:ro" \
+  -v "$(pwd)/sgsl_processed:/app/sgsl_processed:ro" \
+  unmute-backend
+```
+
+**Using environment file:**
+```bash
+docker run -d \
+  --name unmute-backend \
+  -p 8000:8000 \
+  --env-file backend/.env \
+  -v "$(pwd)/backend:/app/backend" \
+  -v "$(pwd)/sgsl_dataset:/app/sgsl_dataset:ro" \
+  -v "$(pwd)/sgsl_processed:/app/sgsl_processed:ro" \
+  unmute-backend
+```
+
 ### 3. Run in detached mode (background)
 
+**With docker-compose:**
 ```bash
 docker-compose up -d
+```
+
+**With Docker directly:**
+```bash
+# Already covered above with -d flag
 ```
 
 ### 4. View logs
