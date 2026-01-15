@@ -46,7 +46,11 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
 
     // Show GIF
     if (item.assets?.gif) {
-      const gifUrl = `${API_BASE}${item.assets.gif}?t=${Date.now()}`
+      // Check if URL is already absolute (starts with http:// or https://)
+      const isAbsoluteUrl = item.assets.gif.startsWith('http://') || item.assets.gif.startsWith('https://')
+      const gifUrl = isAbsoluteUrl 
+        ? `${item.assets.gif}?t=${Date.now()}`
+        : `${API_BASE}${item.assets.gif}?t=${Date.now()}`
       setCurrentGifUrl(gifUrl)
     }
 

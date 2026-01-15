@@ -55,27 +55,27 @@ function App() {
       <Header />
       
       {/* Mode Switcher */}
-      <div className="flex gap-2 mb-8 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+      <div className="inline-flex gap-2 p-2 bg-[var(--bg-cream)] rounded-[20px] border-2 border-[var(--border-soft)] mb-8 animate-fade-in shadow-md" style={{ animationDelay: "0.1s" }}>
         <Button 
-          variant={mode === "translate" ? "default" : "outline"}
+          variant={mode === "translate" ? "default" : "ghost"}
           onClick={() => setMode("translate")}
           className={mode === "translate" 
-            ? "bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white" 
-            : "border-[var(--border-warm)] text-[var(--text-secondary)] hover:bg-[var(--bg-cream)]"
+            ? "bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white shadow-lg font-semibold px-6 py-6 rounded-[16px]" 
+            : "text-[var(--text-secondary)] hover:bg-white/60 hover:text-[var(--text-primary)] px-6 py-6 rounded-[16px]"
           }
         >
-          <MessageSquare className="w-4 h-4 mr-2" />
+          <MessageSquare className="w-5 h-5 mr-2" />
           Translate
         </Button>
         <Button 
-          variant={mode === "video" ? "default" : "outline"}
+          variant={mode === "video" ? "default" : "ghost"}
           onClick={() => setMode("video")}
           className={mode === "video" 
-            ? "bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white" 
-            : "border-[var(--border-warm)] text-[var(--text-secondary)] hover:bg-[var(--bg-cream)]"
+            ? "bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white shadow-lg font-semibold px-6 py-6 rounded-[16px]" 
+            : "text-[var(--text-secondary)] hover:bg-white/60 hover:text-[var(--text-primary)] px-6 py-6 rounded-[16px]"
           }
         >
-          <Video className="w-4 h-4 mr-2" />
+          <Video className="w-5 h-5 mr-2" />
           Video Call
         </Button>
       </div>
