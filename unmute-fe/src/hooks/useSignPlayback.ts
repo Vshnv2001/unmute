@@ -181,6 +181,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
 
       console.log(`Finished: ${item.token} (${Date.now() - startTime}ms)`)
       setCurrentGifUrl(undefined)
+      // Clear the skeleton avatar
+      if (avatarRef.current) {
+        avatarRef.current.updateFrame(null)
+      }
       return true
     } catch (e) {
       console.error("Fetch error", e)
@@ -191,6 +195,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
         await new Promise(r => setTimeout(r, remaining))
       }
       setCurrentGifUrl(undefined)
+      // Clear the skeleton avatar
+      if (avatarRef.current) {
+        avatarRef.current.updateFrame(null)
+      }
       return false
     }
   }, [avatar, fetchLandmarks])
@@ -259,6 +267,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     // Cleanup
     setCurrentToken(undefined)
     setCurrentGifUrl(undefined)
+    // Clear the skeleton avatar
+    if (avatarRef.current) {
+      avatarRef.current.updateFrame(null)
+    }
     setIsPlaying(false)
     console.log("Sequence complete")
   }, [isPlaying, playSingleSign])
@@ -267,6 +279,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     playbackIdRef.current++
     setCurrentToken(undefined)
     setCurrentGifUrl(undefined)
+    // Clear the skeleton avatar
+    if (avatarRef.current) {
+      avatarRef.current.updateFrame(null)
+    }
     setIsPlaying(false)
   }, [])
 
