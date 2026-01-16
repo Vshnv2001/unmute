@@ -48,7 +48,8 @@ export function OutputPanel({
                   <img 
                     src={currentGifUrl} 
                     alt="Sign Language" 
-                    className="max-h-full object-contain"
+                    className="max-h-full max-w-full object-contain"
+                    style={{ maxHeight: '400px', maxWidth: '400px' }}
                   />
                 ) : (
                   <div className="flex flex-col items-center gap-2.5 text-text-light">

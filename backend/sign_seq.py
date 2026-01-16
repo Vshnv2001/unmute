@@ -40,6 +40,28 @@ class SignSequenceManager:
             with open(pkl_path, 'rb') as f:
                 return pickle.load(f)
 
+    def _load_pkl_data_full_body_pose(self, sign_name: str):
+        """Load full-body pose pickle data from GCS or local filesystem."""
+        pose_filename = f"{sign_name}_full_body_pose.pkl"
+        if self.use_gcs:
+            gcs_path = f"{GCS_PKL_PREFIX}/{pose_filename}"
+            print(f"[SignSequenceManager] Loading full-body pose from GCS: {gcs_path}")
+            data = read_pickle(gcs_path)
+            if data is None:
+                print(f"[SignSequenceManager] Full-body pose data not found in GCS for {sign_name}")
+            return data
+        else:
+            pkl_path = os.path.join(self.pkl_dir, pose_filename)
+            print(f"Full-body pose PKL path: {pkl_path}")
+            print(f"Full-body pose PKL path exists: {os.path.exists(pkl_path)}")
+            if not os.path.exists(pkl_path):
+                print(f"Full-body pose data not found for {sign_name}")
+                print(f"Checked path: {os.path.abspath(pkl_path)}")
+                return None
+            
+            with open(pkl_path, 'rb') as f:
+                return pickle.load(f)
+
     def get_sign_frames(self, sign_name: str):
         """
         Load frames for a given sign.
@@ -207,3 +229,52 @@ class SignSequenceManager:
         else:
             print(f"Unknown data format with {D} elements")
             return None
+
+    def get_sign_full_body_pose_frames(self, sign_name: str):
+        """
+        Load full body pose frames from {sign_name}_full_body_pose.pkl.
+        Returns raw 33x3 pose landmarks without normalization.
+        Returns: {
+            "frames": [
+                { "pose": [[x,y,z]...] },  # 33 landmarks per frame
+                ...
+            ],
+            "L_orig": int,
+            "L_max": int
+        }
+        """
+        data = self._load_pkl_data_full_body_pose(sign_name)
+        if data is None:
+            return None
+            
+        X = data["X"]
+        L, D = X.shape
+        print(f"[get_sign_full_body_pose_frames] {sign_name}: Data shape ({L}, {D})")
+        
+        # Full body pose data should be 33 landmarks × 3 coordinates = 99
+        if D != 99:
+            print(f"[get_sign_full_body_pose_frames] {sign_name}: Expected 99 dimensions, got {D}")
+            return None
+        
+        # Convert to frames with raw coordinates (no normalization)
+        # Filter out zero-padded frames
+        frames_out = []
+        for t in range(L):
+            row = X[t]
+            # Check if frame has any non-zero data
+            if np.any(row != 0):
+                # Reshape to (33, 3) - 33 pose landmarks with x, y, z coordinates
+                pose = np.round(row.reshape(33, 3), 4).tolist()
+                frames_out.append({"pose": pose})
+        
+        print(f"[get_sign_full_body_pose_frames] {sign_name}: {len(frames_out)} non-zero frames out of {L} total")
+        
+        if len(frames_out) == 0:
+            print(f"[get_sign_full_body_pose_frames] {sign_name}: WARNING - No non-zero frames found!")
+            return None
+        
+        return {
+            "frames": frames_out,
+            "L_orig": data.get("L_orig", L),
+            "L_max": data.get("L_max", L)
+        }
