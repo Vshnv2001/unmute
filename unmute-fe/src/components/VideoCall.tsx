@@ -166,9 +166,8 @@ export function VideoCall() {
               className="text-center"
             />
             <Button 
-              variant="outline" 
               onClick={generateRoomId}
-              className="shrink-0"
+              className="shrink-0 !bg-[var(--accent-terracotta)] hover:!bg-[var(--accent-warm)] !text-white !shadow-none"
             >
               Generate
             </Button>
@@ -176,7 +175,7 @@ export function VideoCall() {
           
           <Button 
             onClick={handleJoinCall} 
-            className="w-full bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white"
+            className="w-full !bg-[var(--accent-terracotta)] hover:!bg-[var(--accent-warm)] !text-white !shadow-none"
             disabled={!roomId.trim()}
           >
             <Phone className="w-4 h-4 mr-2" />
@@ -375,10 +374,10 @@ export function VideoCall() {
           <Button
             onClick={handleTranscribeToggle}
             disabled={isProcessing}
-            className={`w-full ${
+            className={`w-full !shadow-none ${
               isRecording 
-                ? "bg-red-500 hover:bg-red-600 text-white" 
-                : "bg-[var(--accent-terracotta)] hover:bg-[var(--accent-warm)] text-white"
+                ? "!bg-red-500 hover:!bg-red-600 !text-white" 
+                : "!bg-[var(--accent-terracotta)] hover:!bg-[var(--accent-warm)] !text-white"
             }`}
           >
             {isProcessing ? (
