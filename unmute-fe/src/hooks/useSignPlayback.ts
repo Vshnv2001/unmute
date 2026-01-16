@@ -48,9 +48,21 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     if (item.assets?.gif) {
       // Check if URL is already absolute (starts with http:// or https://)
       const isAbsoluteUrl = item.assets.gif.startsWith('http://') || item.assets.gif.startsWith('https://')
-      const gifUrl = isAbsoluteUrl 
-        ? `${item.assets.gif}?t=${Date.now()}`
-        : `${API_BASE}${item.assets.gif}?t=${Date.now()}`
+      let gifUrl: string
+      
+      if (isAbsoluteUrl) {
+        // Use absolute URL directly
+        gifUrl = `${item.assets.gif}?t=${Date.now()}`
+      } else {
+        // For relative URLs, prepend API_BASE
+        // Ensure API_BASE has protocol and handle both with/without trailing slash
+        const baseUrl = API_BASE.startsWith('http') ? API_BASE : `https://${API_BASE}`
+        const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+        const cleanPath = item.assets.gif.startsWith('/') ? item.assets.gif : `/${item.assets.gif}`
+        gifUrl = `${cleanBase}${cleanPath}?t=${Date.now()}`
+      }
+      
+      console.log('[GIF URL]', gifUrl)
       setCurrentGifUrl(gifUrl)
     }
 
