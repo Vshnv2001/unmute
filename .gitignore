@@ -8,4 +8,3 @@ __pycache__/
 utils/sgsl_dataset.zip
 utils/sgsl_dataset_260525.zip
 venv/
-gcs-key.json
