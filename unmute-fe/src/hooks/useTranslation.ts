@@ -26,6 +26,8 @@ export interface LandmarksData {
   hand_frames?: HandFrame[]
   frames?: PoseFrame[]
   format?: "pose" | "hands"
+  L_orig?: number
+  L_max?: number
 }
 
 export interface PoseFrame {

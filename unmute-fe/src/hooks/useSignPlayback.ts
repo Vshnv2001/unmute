@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import type { PlanItem, LandmarksData, HandFrame } from "./useTranslation"
 import type { AvatarController, PoseFrame } from "@/lib/avatar-controller"
 
@@ -15,6 +15,13 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
   const [currentGifUrl, setCurrentGifUrl] = useState<string | undefined>()
   
   const playbackIdRef = useRef(0)
+  const avatarRef = useRef<AvatarController | null>(null)
+  
+  // Keep avatar ref in sync with prop
+  useEffect(() => {
+    avatarRef.current = avatar
+    console.log(`[Playback] Avatar ref updated:`, { hasAvatar: !!avatar, avatarType: avatar?.constructor?.name })
+  }, [avatar])
 
   const fetchLandmarks = useCallback(async (signName: string): Promise<LandmarksData | null> => {
     try {
@@ -48,9 +55,21 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     if (item.assets?.gif) {
       // Check if URL is already absolute (starts with http:// or https://)
       const isAbsoluteUrl = item.assets.gif.startsWith('http://') || item.assets.gif.startsWith('https://')
-      const gifUrl = isAbsoluteUrl 
-        ? `${item.assets.gif}?t=${Date.now()}`
-        : `${API_BASE}${item.assets.gif}?t=${Date.now()}`
+      let gifUrl: string
+      
+      if (isAbsoluteUrl) {
+        // Use absolute URL directly
+        gifUrl = `${item.assets.gif}?t=${Date.now()}`
+      } else {
+        // For relative URLs, prepend API_BASE
+        // Ensure API_BASE has protocol and handle both with/without trailing slash
+        const baseUrl = API_BASE.startsWith('http') ? API_BASE : `https://${API_BASE}`
+        const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+        const cleanPath = item.assets.gif.startsWith('/') ? item.assets.gif : `/${item.assets.gif}`
+        gifUrl = `${cleanBase}${cleanPath}?t=${Date.now()}`
+      }
+      
+      console.log('[GIF URL]', gifUrl)
       setCurrentGifUrl(gifUrl)
     }
 
@@ -59,17 +78,40 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
 
     try {
       const data = await fetchLandmarks(item.sign_name)
-      console.log(`[Landmarks Response] ${item.sign_name}:`, data)
+      console.log(`[Landmarks Response] ${item.sign_name}:`, {
+        hasPoseFrames: !!data?.pose_frames,
+        poseFramesLength: data?.pose_frames?.length,
+        firstFrame: data?.pose_frames?.[0],
+        L_orig: data?.L_orig,
+        L_max: data?.L_max
+      })
       
       // Get frames from various possible formats
       let frames: PoseFrame[] | null = null
       
-      // Check for pose_frames (can be either full pose or hand data)
+      // Check for pose_frames (full-body pose data from backend)
       if (data?.pose_frames && Array.isArray(data.pose_frames) && data.pose_frames.length > 0) {
         frames = data.pose_frames as PoseFrame[]
-        // Check if it's hand data (has left_hand/right_hand) or pose data (has pose)
-        const isHandData = frames[0] && ('left_hand' in frames[0] || 'right_hand' in frames[0])
-        console.log(`Playing ${isHandData ? 'hand' : 'pose'} skeleton: ${item.token} (${frames.length} frames)`)
+        // Check if it's pose data (has pose property)
+        const isPoseData = frames[0] && 'pose' in frames[0] && Array.isArray(frames[0].pose)
+        if (isPoseData) {
+          console.log(`Playing full-body pose skeleton: ${item.token} (${frames.length} frames)`)
+          console.log(`[Debug] First frame structure:`, {
+            hasPose: !!frames[0].pose,
+            poseLength: frames[0].pose?.length,
+            firstPoint: frames[0].pose?.[0],
+            samplePoints: frames[0].pose?.slice(0, 3)
+          })
+          console.log(`[Debug] Avatar state check:`, {
+            hasAvatar: !!avatar,
+            avatarType: typeof avatar,
+            avatarConstructor: avatar?.constructor?.name
+          })
+        } else {
+          // Legacy hand data in pose_frames format
+          const isHandData = frames[0] && ('left_hand' in frames[0] || 'right_hand' in frames[0])
+          console.log(`Playing ${isHandData ? 'hand' : 'pose'} skeleton: ${item.token} (${frames.length} frames)`)
+        }
       } 
       // Check for hand_frames (legacy format with left/right)
       else if (data?.hand_frames && Array.isArray(data.hand_frames) && data.hand_frames.length > 0) {
@@ -89,14 +131,57 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
       }
 
       // Play skeleton animation (if available)
-      if (frames && avatar) {
+      // Use ref to get latest avatar value (avoids stale closure issues)
+      const currentAvatar = avatarRef.current
+      console.log(`[Playback] ===== CHECKING CONDITIONS =====`)
+      console.log(`[Playback] Checking conditions:`, {
+        hasFrames: !!frames,
+        framesLength: frames?.length,
+        hasAvatar: !!currentAvatar,
+        hasAvatarProp: !!avatar,
+        avatarType: currentAvatar?.constructor?.name
+      })
+      
+      // Wait for avatar if not ready yet
+      if (frames && !currentAvatar) {
+        console.log(`[Playback] Avatar not ready, waiting up to 2 seconds...`)
+        const maxWait = 2000
+        const checkInterval = 50
+        const startWait = Date.now()
+        
+        while (!avatarRef.current && (Date.now() - startWait) < maxWait) {
+          await new Promise(resolve => setTimeout(resolve, checkInterval))
+        }
+        
+        if (avatarRef.current) {
+          console.log(`[Playback] Avatar became ready after ${Date.now() - startWait}ms`)
+        } else {
+          console.warn(`[Playback] Avatar still not ready after ${maxWait}ms`)
+        }
+      }
+      
+      if (frames && avatarRef.current) {
         try {
+          console.log(`[Playback] ===== STARTING ANIMATION =====`)
+          console.log(`[Playback] Preparing to play ${frames.length} frames for ${item.token}`)
           // Calculate FPS to fit animation into 3 seconds
           const fps = Math.max(10, frames.length / (SIGN_DURATION / 1000))
-          await avatar.playSequence(frames, fps)
+          console.log(`[Playback] Calculated FPS: ${fps} for ${frames.length} frames`)
+          console.log(`[Playback] Calling avatar.playSequence with ${frames.length} frames`)
+          const result = await avatarRef.current.playSequence(frames, fps)
+          console.log(`[Playback] Animation completed, result: ${result}`)
         } catch (e) {
-          console.error(`Error playing skeleton for ${item.token}:`, e)
+          console.error(`[Playback] Error playing skeleton for ${item.token}:`, e)
+          console.error(e)
         }
+      } else {
+        console.warn(`[Playback] Cannot play skeleton - missing requirements:`, {
+          hasFrames: !!frames,
+          framesLength: frames?.length,
+          hasAvatar: !!avatarRef.current,
+          framesType: frames?.constructor?.name,
+          avatarType: avatarRef.current?.constructor?.name
+        })
       }
 
       // Ensure we wait the full 3 seconds
@@ -108,6 +193,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
 
       console.log(`Finished: ${item.token} (${Date.now() - startTime}ms)`)
       setCurrentGifUrl(undefined)
+      // Clear the skeleton avatar
+      if (avatarRef.current) {
+        avatarRef.current.updateFrame(null)
+      }
       return true
     } catch (e) {
       console.error("Fetch error", e)
@@ -118,6 +207,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
         await new Promise(r => setTimeout(r, remaining))
       }
       setCurrentGifUrl(undefined)
+      // Clear the skeleton avatar
+      if (avatarRef.current) {
+        avatarRef.current.updateFrame(null)
+      }
       return false
     }
   }, [avatar, fetchLandmarks])
@@ -186,6 +279,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     // Cleanup
     setCurrentToken(undefined)
     setCurrentGifUrl(undefined)
+    // Clear the skeleton avatar
+    if (avatarRef.current) {
+      avatarRef.current.updateFrame(null)
+    }
     setIsPlaying(false)
     console.log("Sequence complete")
   }, [isPlaying, playSingleSign])
@@ -194,6 +291,10 @@ export function useSignPlayback({ avatar }: UseSignPlaybackOptions) {
     playbackIdRef.current++
     setCurrentToken(undefined)
     setCurrentGifUrl(undefined)
+    // Clear the skeleton avatar
+    if (avatarRef.current) {
+      avatarRef.current.updateFrame(null)
+    }
     setIsPlaying(false)
   }, [])
 
