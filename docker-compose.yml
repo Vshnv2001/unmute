@@ -14,8 +14,6 @@ services:
       # GCS configuration (set USE_GCS=true for production)
       - USE_GCS=${USE_GCS}
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
-      # GCS authentication
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-key.json
     env_file:
       - backend/.env
     volumes:
@@ -24,8 +22,6 @@ services:
       # Mount datasets
       - ./sgsl_dataset:/app/sgsl_dataset:ro
       - ./sgsl_processed:/app/sgsl_processed:ro
-      # Mount GCS credentials
-      - ./gcs-key.json:/app/gcs-key.json:ro
     restart: unless-stopped
     networks:
       - unmute-network

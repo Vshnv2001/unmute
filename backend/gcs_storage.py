@@ -23,9 +23,6 @@ GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "unmute-datasets")
 # GCS public URL base (for static file serving)
 GCS_PUBLIC_URL = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}"
 
-# Log configuration on module import
-print(f"[GCS Storage] USE_GCS={USE_GCS}, BUCKET={GCS_BUCKET_NAME}, PUBLIC_URL={GCS_PUBLIC_URL}")
-
 # Initialize GCS client only if needed
 _gcs_client = None
 _gcs_bucket = None
@@ -58,14 +55,10 @@ def get_static_url(relative_path: str) -> str:
     """
     if USE_GCS:
         # Return GCS public URL
-        url = f"{GCS_PUBLIC_URL}/{relative_path}"
-        print(f"[GCS] Generated URL: {url}")
-        return url
+        return f"{GCS_PUBLIC_URL}/{relative_path}"
     else:
         # Return local static path
-        url = f"/static/{relative_path}"
-        print(f"[Local] Generated URL: {url}")
-        return url
+        return f"/static/{relative_path}"
 
 
 def file_exists(relative_path: str, local_base_dir: str = None) -> bool:

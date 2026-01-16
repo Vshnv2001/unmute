@@ -459,7 +459,6 @@ export function VideoCall() {
                   src={currentGifUrl} 
                   alt="Sign Language" 
                   className="max-h-full max-w-full object-contain rounded"
-                  style={{ maxHeight: '400px', maxWidth: '400px' }}
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 text-[var(--text-light)]">

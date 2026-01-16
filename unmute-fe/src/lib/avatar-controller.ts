@@ -91,34 +91,21 @@ export class AvatarController {
   }
 
   private createRig(): void {
-    // MediaPipe Pose Topology (Complete 33 landmarks connections)
+    // MediaPipe Pose Topology (Connections)
     this.connections = [
-      // Face - Left eye
-      [0, 1], [1, 2], [2, 3], [3, 7],
-      // Face - Right eye
-      [0, 4], [4, 5], [5, 6], [6, 8],
-      // Mouth
-      [9, 10],
-      // Torso
+      // Face
+      [0, 1], [1, 2], [2, 3], [3, 7],  // Left eye
+      [0, 4], [4, 5], [5, 6], [6, 8],  // Right eye
+      [9, 10],  // Mouth
+      // Upper body
       [11, 12],  // Shoulders
-      [11, 23], [12, 24],  // Shoulders to hips
+      [11, 13], [13, 15],  // Left arm
+      [12, 14], [14, 16],  // Right arm
+      [11, 23], [12, 24],  // Shoulder to hip
       [23, 24],  // Hips
-      // Left arm
-      [11, 13], [13, 15],  // Shoulder -> Elbow -> Wrist
-      [15, 17], [15, 19], [15, 21],  // Wrist to pinky, index, thumb
-      [17, 19],  // Pinky to index
-      // Right arm
-      [12, 14], [14, 16],  // Shoulder -> Elbow -> Wrist
-      [16, 18], [16, 20], [16, 22],  // Wrist to pinky, index, thumb
-      [18, 20],  // Pinky to index
-      // Left leg
-      [23, 25], [25, 27],  // Hip -> Knee -> Ankle
-      [27, 29], [29, 31],  // Ankle -> Heel -> Foot index
-      [27, 31],  // Ankle to foot index
-      // Right leg
-      [24, 26], [26, 28],  // Hip -> Knee -> Ankle
-      [28, 30], [30, 32],  // Ankle -> Heel -> Foot index
-      [28, 32],  // Ankle to foot index
+      // Lower body
+      [23, 25], [25, 27],  // Left leg
+      [24, 26], [26, 28],  // Right leg
     ]
 
     // Create joint spheres (33 joints for MediaPipe Pose)
@@ -343,24 +330,11 @@ export class AvatarController {
       return hasValidData
     }
 
-    // Handle pose data (full-body pose with raw coordinates)
+    // Handle pose data (original logic)
     this.hideAllHands() // Hide hands when showing pose
     
     const points = frame.pose
-    console.log('[Avatar] updateFrame - pose data:', {
-      hasPose: !!points,
-      isArray: Array.isArray(points),
-      length: points?.length,
-      firstPoint: points?.[0],
-      samplePoints: points?.slice(0, 3)
-    })
-    
     if (!points || !Array.isArray(points) || points.length !== 33) {
-      console.warn('[Avatar] Invalid pose data:', {
-        hasPoints: !!points,
-        isArray: Array.isArray(points),
-        length: points?.length
-      })
       this.hideAllPose()
       return false
     }
@@ -376,22 +350,17 @@ export class AvatarController {
     )
 
     if (!isPresent) {
-      console.warn('[Avatar] No valid pose points found (all zeros or invalid)')
       this.hideAllPose()
       return false
     }
-    
-    console.log('[Avatar] Updating pose with', points.filter(p => p && Array.isArray(p) && p.length >= 3).length, 'valid points')
 
-    // Use raw coordinates without normalization - just scale for visibility
-    // MediaPipe coordinates are in normalized image space (0-1), so we scale them
-    const scale = 1.5  // Scale factor for visibility (reduced from 2.0 to 1.5 = 25% smaller)
-    const zScale = 0.75  // Z depth scale (reduced proportionally)
+    const scale = 1.5
+    const zScale = 0.5
 
     // First, hide all joints
     this.joints.forEach((j) => (j.visible = false))
 
-    // Update joints using raw coordinates
+    // Update joints
     for (let i = 0; i < 33; i++) {
       const p = points[i]
       const j = this.joints[i]
@@ -405,20 +374,12 @@ export class AvatarController {
         continue
       }
 
-      // Use raw coordinates directly (no centering/normalization)
-      // MediaPipe coordinates: x, y in [0, 1], z is depth
-      // Center by subtracting 0.5 for x,y to center the pose, but use raw z
-      const x = (p[0] - 0.5) * scale
-      const y = -(p[1] - 0.5) * scale  // Flip Y for correct orientation
-      const z = -p[2] * zScale
-      
-      j.position.set(x, y, z)
+      j.position.set(
+        (p[0] - 0.5) * scale,
+        -(p[1] - 0.5) * scale,
+        -p[2] * zScale
+      )
       j.visible = true
-      
-      // Debug first few joints
-      if (i < 3) {
-        console.log(`[Avatar] Joint ${i}:`, { x, y, z, raw: p })
-      }
     }
 
     // Update bones
@@ -487,14 +448,7 @@ export class AvatarController {
   }
 
   async playSequence(frames: PoseFrame[], fps = 30): Promise<boolean> {
-    console.log('[Avatar] playSequence called:', {
-      framesLength: frames?.length,
-      fps,
-      firstFrame: frames?.[0]
-    })
-    
     if (!frames || frames.length === 0) {
-      console.warn('[Avatar] No frames provided to playSequence')
       return false
     }
 
@@ -514,12 +468,10 @@ export class AvatarController {
     }
 
     if (earlyBlankCount === Math.min(earlyCheckFrames, frames.length)) {
-      console.warn("[Avatar] Skeleton sequence appears to be entirely blank (detected early)")
+      console.log("Skeleton sequence appears to be entirely blank (detected early)")
       this.updateFrame(frames[0])
       return false
     }
-    
-    console.log(`[Avatar] Starting animation with ${frames.length} frames at ${fps} fps`)
 
     // Play through frames
     for (const frame of frames) {
